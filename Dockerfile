@@ -2,12 +2,15 @@ FROM python:3.7-alpine3.12
 
 ARG CUSTOM_CRT_URL
 
+WORKDIR /
+
 RUN apk add --no-cache librdkafka git bash curl jq \
     && git clone https://github.com/JeffersonLab/graphical-alarm-client \
     && cd ./graphical-alarm-client/scripts \
-    && cp --parents -r * /scripts \
-    && cd ../.. \
-    && chmod -R +x /scripts/* \
+    && mkdir /scripts \
+    && cp * /scripts \
+    && cd / \
+    && chmod -R +x /scripts \
     && apk add --no-cache --virtual .build-deps gcc musl-dev librdkafka-dev \
     && if [ -z "$CUSTOM_CRT_URL" ] ; then echo "No custom cert needed"; else \
           wget -O /usr/local/share/ca-certificates/customcert.crt $CUSTOM_CRT_URL \

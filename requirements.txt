@@ -8,3 +8,4 @@ idna==2.9
 pytz==2020.1
 requests==2.23.0
 urllib3==1.25.9
+python3-tk
