@@ -4,7 +4,6 @@ A graphical desktop user interface client application for the [kafka-alarm-syste
 - List alarm definitions (including inactive alarms)
 - Shelve alarms
 ## Docker
-First start a local X-Windows server, then:
 ```
 docker-compose up
 ```
@@ -28,3 +27,4 @@ _Linux_:
 ```
 docker run --rm -ti --net=host -e DISPLAY=:0 gui
 ```
+**Note**: This Docker container requires a local X-Windows server, on Microsoft Windows in particular you may need to launch one.
