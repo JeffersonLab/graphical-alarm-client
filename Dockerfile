@@ -1,24 +1,23 @@
-FROM python:3.7-alpine3.12
+FROM python:3.7-slim
 
 ARG CUSTOM_CRT_URL
 
 WORKDIR /
 
-RUN apk add --no-cache librdkafka git bash curl jq \
+RUN apt-get update \
+    && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk \
     && git clone https://github.com/JeffersonLab/graphical-alarm-client \
     && cd ./graphical-alarm-client/scripts \
     && mkdir /scripts \
     && cp * /scripts \
     && cd / \
     && chmod -R +x /scripts \
-    && apk add --no-cache --virtual .build-deps gcc musl-dev librdkafka-dev \
     && if [ -z "$CUSTOM_CRT_URL" ] ; then echo "No custom cert needed"; else \
           wget -O /usr/local/share/ca-certificates/customcert.crt $CUSTOM_CRT_URL \
           && update-ca-certificates \
           && export OPTIONAL_CERT_ARG=--cert=/etc/ssl/certs/ca-certificates.crt \
           ; fi \
     && pip install --no-cache-dir -r ./graphical-alarm-client/requirements.txt $OPTIONAL_CERT_ARG \
-    && apk del .build-deps git \
     && rm -rf ./graphical-alarm-client
 
 WORKDIR /scripts
