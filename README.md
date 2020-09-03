@@ -27,4 +27,4 @@ _Linux_:
 ```
 docker run --rm -ti --net=host -e DISPLAY=:0 gui
 ```
-**Note**: This Docker container requires a local X-Windows server, on Microsoft Windows in particular you may need to launch one.
+**Note**: This Docker container requires a local X-Windows server, on Microsoft Windows and Mac in particular you may need to launch one.
