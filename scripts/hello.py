@@ -1,7 +1,16 @@
+import tkinter as tk
 from tkinter import *
 
-root = Tk()
-a = Label(root, text ="Hello World")
-a.pack()
+class GUI(tk.Frame) :
+    def __init__(self,master=None) :
+        Frame.__init__(self,master)
+        a = Button(master, text = "PUSH ME NOW PLEASE ",command=lambda: self.makeAlarm())
+        a.pack()
 
-root.mainloop()
+    def makeAlarm(self) :
+        print("ALARM")
+
+root = tk.Tk()
+gui = GUI(root)
+
+gui.mainloop()
