@@ -17,7 +17,7 @@ docker build . -t gui
 ```
 _macOS_: 
 ```
-docker run --rm -ti -e DISPLAY=docker.for.mac.host.internal:0 gui
+docker run --rm -ti -e DISPLAY=$ip:0 gui
 ```
 _Windows_:
 ```
