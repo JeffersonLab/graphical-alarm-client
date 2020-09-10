@@ -5,7 +5,7 @@ ARG CUSTOM_CRT_URL
 WORKDIR /
 
 RUN apt-get update \
-    && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk \
+    && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk vim \
     && git clone https://github.com/JeffersonLab/graphical-alarm-client \
     && cd ./graphical-alarm-client/scripts \
     && mkdir /scripts \
