@@ -76,6 +76,7 @@ services:
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY: http://registry:8081
+      DISPLAY: ${DOCKER_DISPLAY}
     volumes:
       - ./scripts:/scripts
     entrypoint: bash
