@@ -11,6 +11,8 @@ Connect to the gui container via a bash terminal:
 ```
 docker exec -it gui bash
 ```
+**Note:** The environment variable DOCKER_DISPLAY must be set according to your host OS and X-Windows configuration.   This environment variable can be stored in a file named __.env__ in the same directory as the docker-compose.yml file.   
+
 **Note:** Use "docker-compose down" to cleanup
 ### Docker Build
 ```
