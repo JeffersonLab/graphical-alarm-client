@@ -14,6 +14,8 @@ docker exec -it gui bash
 **Note:** The environment variable DOCKER_DISPLAY must be set according to your host OS and X-Windows configuration.   This environment variable can be stored in a file named __.env__ in the same directory as the docker-compose.yml file.   
 
 **Note:** Use "docker-compose down" to cleanup
+
+**Note:** The __scripts__ directory is mounted as a volume in the __gui__ container to facilitate development activities: changes are reflected inside the container and on the host so they can be persisted to git version control.
 ### Docker Build
 ```
 docker build . -t gui 
