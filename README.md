@@ -25,7 +25,7 @@ All of the containers must communicate, which is easiest if they're all on the s
 ```
 docker run -rm -it -e DISPLAY=? -e BOOTSTRAP_SERVERS=kafka:9092 -e SCHEMA_REGISTRY=http://registry:8081 -v ? --network=graphical-net --entrypoint bash gui
 ```
-Where BOOTSTRAP_SERVERS and SCHEMA_REGISTRY must point to valid Kafka and Registry hosts.  The DISPLAY is host dependent and so is the relative path in the volume option:
+Where BOOTSTRAP_SERVERS and SCHEMA_REGISTRY refer to valid Kafka and Registry hosts.  The DISPLAY is host dependent and so is the relative path in the volume option:
 _macOS_: 
 ```
 -e DISPLAY=$ip:0 -v $(pwd)/scripts:/scripts
