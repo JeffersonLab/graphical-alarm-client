@@ -23,10 +23,9 @@ docker build . -t gui
 ### Docker Run
 All of the containers must communicate, which is easiest if they're all on the same Docker network.  Also, an X-Windows DISPLAY environment variable must be set properly for the host in order to see the display.  Docker compose makes this easier, but if you want to just run the gui container use:
 ```
-docker run -rm -it -e DISPLAY=? -v ? gui
+docker run -rm -it -e DISPLAY=? -v ? --network=graphical-net --entrypoint bash gui
 ```
 Where the DISPLAY is host dependent and so is the relative path in the volume option:
-```
 _macOS_: 
 ```
 -e DISPLAY=$ip:0 -v $(pwd)/scripts:/scripts
