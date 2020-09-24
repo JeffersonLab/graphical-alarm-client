@@ -17,6 +17,7 @@ RUN apt-get update \
           && update-ca-certificates \
           && export OPTIONAL_CERT_ARG=--cert=/etc/ssl/certs/ca-certificates.crt \
           ; fi \
+    && pip install --upgrade pip $OPTIONAL_CERT_ARG \
     && pip install --no-cache-dir -r ./graphical-alarm-client/requirements.txt $OPTIONAL_CERT_ARG \
     && rm -rf ./graphical-alarm-client
 
