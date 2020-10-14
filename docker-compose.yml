@@ -47,7 +47,7 @@ services:
       - graphnet
 
   console:
-    image: slominskir/kafka-alarm-system:0.3.0
+    image: slominskir/kafka-alarm-system:0.5.0
     hostname: console
     container_name: console
     depends_on:
