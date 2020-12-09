@@ -23,6 +23,11 @@ RUN apt-get update \
     && pip install --no-cache-dir -r ./graphical-alarm-client/requirements.txt $OPTIONAL_CERT_ARG \
     && rm -rf ./graphical-alarm-client
 
+## For now, we just install this missing dependency manually downloaded from https://download.opensuse.org/repositories/home:/stevenpusser:/libxcb-util1/Debian_9.0/amd64/libxcb-util1_0.4.0-0.1~obs_amd64.deb
+RUN dpkg -i libxcb-util1_0.4.0-0.1_obs_amd64.deb \
+    apt-get update -y \
+    apt-get install -f
+
 WORKDIR /scripts
 
 USER guiuser
