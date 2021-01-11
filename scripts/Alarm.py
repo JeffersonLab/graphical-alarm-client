@@ -9,6 +9,7 @@ def ExtractAlarmType(definition) :
    type = "StreamRuleAlarm"
    
    producer = definition['producer']
+  
    if ('pv' in producer) :
       type = "DirectCAAlarm"
    
@@ -16,6 +17,7 @@ def ExtractAlarmType(definition) :
 
 def MakeAlarm(alarmname,type,params=None) :
    alarm = None
+  
    if (type == None) :
       type = ExtractAlarmType(params)
    
@@ -41,11 +43,34 @@ class Alarm(object) :
       #timestamp = time of ACTIVE ALARM
       #acktime   = time of ACKNOWLEDGEMENT  
       #cleartime = time of CLEARING
-      self.timestamp = StringVar()
-      self.acktime = StringVar()
-      self.cleartime = StringVar()
+      self.timestamp = None
+      self.acktime = None
+      self.cleartime = None
+      #self.timestamp = StringVar()
+      #self.acktime = StringVar()
+      #self.cleartime = StringVar()
       
-     
+   #Determine which image to use as the status indicator
+   def GetDisplayIndicator(self) :
+      
+      #The image is based on the current status, or
+      #if the alarm has cleared, but not been acknowledged.
+      image = None
+      
+      status = self.GetStatus()
+      ack = self.GetAcknowledged()
+      #Alarm is active, use the image associated with its current
+      #status
+      if (status) :
+         image = GetStatusImage(status)
+      elif (not status and not ack) :
+         image = GetStatusImage("ACK")
+      #latched alarm is no longer active, but cannot be removed since it 
+      #has not been acknowledged. Image will be white.
+#      elif (status == None and laststatus != None) :        
+ #        image = GetPriorityImage("ACK")
+      return(image)
+  
    #If alarm already exists, replace previous definition.
    def Configure(self,params) :
       self.definition = params
@@ -56,13 +81,14 @@ class Alarm(object) :
    
    #extract the time stamp from the last active alarm
    def GetTimeStamp(self) :      
-      return(self.timestamp.get())
+      #print(type(self.timestamp))
+      return(self.timestamp)
    
    def GetAckTime(self) :
-      return(self.acktime.get())
+      return(self.acktime)
    
    def GetClearTime(self) :
-      return(self.cleartime.get())
+      return(self.cleartime)
            
    #Priority from the current status 
    def GetPriority(self) :    
@@ -73,8 +99,12 @@ class Alarm(object) :
       
    #Get the alarm's trigger for display
    def GetTrigger(self) :
-      producer = self.GetParam('producer')
-      pv = producer['pv']
+      pv = None
+      try :
+         producer = self.GetParam('producer')
+         pv = producer['pv']
+      except :
+         pass
       return(pv)
    
    #Does the alarm "latch" ie. Does the alarm require operator acknowledgement. 
@@ -122,9 +152,7 @@ class Alarm(object) :
          self.Remove()
       else :
          if (self.GetLatching()) :
-            print("ALARMING:",alarming,"ACK:",ack)
-         
-         
+            print("ALARMING:",alarming,"ACK:",ack)         
          self.Display()
          return
          
@@ -142,23 +170,22 @@ class Alarm(object) :
          elif (self.GetLastPriority() is None) :
             self.Remove()
          else :
-            print("HERe",priority,lastpriority)
+           
             self.Display()
-      
-       #  else :
-         
-        #  self.Display()
+ 
      
    def Reconfig(self) :
       GetMain().GetActivePane().ReconfigAlarm(self)
            
    #Remove an inactive alarm from the alarm pane      
    def Remove(self) :
-      GetMain().GetActivePane().RemoveAlarm(self)
+      GetModel().removeAlarm(self)
    
    #Add an active alarm 
    def Display(self) :
-      GetMain().GetActivePane().AddAlarm(self)
+      
+      GetModel().addAlarm(self)
+      #GetMain().GetActivePane().AddAlarm(self)
 
    
    #Acknowledge an alarm by sending a Kafka message to the 'active-alarms'
@@ -248,22 +275,37 @@ class StreamRuleAlarm(Alarm) :
          alarming = "ALARMING"
       return(alarming)
    
+   #Get the alarm's trigger for display
+   def GetTrigger(self) :
+      
+      pv = None
+      try :
+         producer = self.GetParam('producer')
+         pv = producer['jar']
+      except :
+         pass
+      return(pv)
+
    def ExtractAlarming(self,status) :
-      alarming = status['msg']['alarming']
-      return(alarming)
+      
+      #alarming = status['msg']['alarming']
+      return(status)
       
    def SetStatus(self,ts,status) :
-      self.alarming = self.ExtractAlarming(status)
-      self.timestamp.set(ts)
+      self.alarming = True
+      self.ack = False
+      
+      #self.alarming = self.ExtractAlarming(status)
+      self.timestamp = ts
    
    def ExtractAck(self,status) :
-      ack = status['msg']['acknowledged']
-      return(ack)
+      #ack = status['msg']['acknowledged']
+      return(status)
       
    def SetAck(self,ts,status) :
-      
-      self.ack = self.ExtractAck(status)
-      self.acktime.set(ts)
+      self.ack = True
+      #self.ack = self.ExtractAck(status)
+      self.acktime = ts
       
 class EpicsAlarm(Alarm) :
    def __init__(self,name,params=None) :
@@ -297,13 +339,13 @@ class EpicsAlarm(Alarm) :
       #If a severity is assigned, 
       #Alarm has been cleared
       if (sevr == "NO_ALARM") :
-         self.cleartime.set(ts) 
-         print("NO ALARM ACK:", self.GetAcknowledged())
+         self.cleartime = ts
+         
       else :
-         self.timestamp.set(ts)
+         self.timestamp = ts
          self.ack = False
-         self.acktime.set("")
-         self.cleartime.set("")
+         self.acktime = ""
+         self.cleartime = ""
       
       self.lastsevr = self.sevr
       self.laststat = self.stat
@@ -320,7 +362,7 @@ class EpicsAlarm(Alarm) :
    
    def SetAck(self,ts,status) :
       self.ack = self.ExtractAck(status)
-      self.acktime.set(ts)
+      self.acktime = ts
    
    #Has the alarm been acknowledged?
    def GetAcknowledged(self) :      

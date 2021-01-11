@@ -3,6 +3,7 @@ import pwd
 import types
 #import click
 import time
+from datetime import datetime
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 from confluent_kafka import avro, Producer, Consumer
@@ -203,6 +204,9 @@ class KafkaConsumer(KafkaConnection) :
    #Convert the timestamp into something readable
    def DecodeTimeStamp(self,msg) :
       timestamp = msg.timestamp()
+      
+      ts = datetime.fromtimestamp(timestamp[1]//1000)
+      return(ts)
       #comes in ms, so need to convert to seconds
       seconds = timestamp[1]/1000
       ts = time.ctime(seconds)
@@ -216,11 +220,6 @@ class KafkaConsumer(KafkaConnection) :
          if (not self.topicloaded[topic]) :
             loaded = False
       return(loaded)
-
-
-        
-
-
 
 
 

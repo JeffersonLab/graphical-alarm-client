@@ -25,7 +25,7 @@ class AlarmProperties(tk.Frame) :
       outerframe.pack(side='top',anchor='nw',fill='both',expand=True)
       self.outerframe = outerframe
       
-      color = GetPriorityColor(alarm.GetPriority())
+      color = GetStatusColor(alarm.GetStatus())
       if (color != None) :
          outerframe['background'] = color
       
@@ -59,6 +59,9 @@ class AlarmProperties(tk.Frame) :
       Frame(innerframe,height=15,bg='white').pack(side='top',
          fill='x',anchor='n')
       
+      
+      trigger = alarm.GetTrigger()
+      print("TRIGGER:",trigger)
       
       triggerframe = Frame(innerframe,bg='white')
       triggerframe.pack(side='top',anchor='nw',fill='x')      
@@ -125,7 +128,7 @@ class AlarmProperties(tk.Frame) :
          relief='flat',bg='white').pack(side='left',anchor='center')
       
       
-      self.ConfigProperties(alarm.GetPriority())
+      self.ConfigProperties(alarm.GetStatus())
    
    def AckAlarm(self) :
       alarm = self.alarm 
@@ -135,14 +138,14 @@ class AlarmProperties(tk.Frame) :
       self.propwidget.destroy()
          
    
-   def ConfigProperties(self,priority) :
+   def ConfigProperties(self,status) :
       alarm = self.alarm
       
-      color = GetPriorityColor(priority)
+      color = GetStatusColor(status)
       if (color != None) :
          self.outerframe['background'] = color
        
-      
+      return
       if (self.ackbutton != None) :
          state = 'normal'
          bg = color

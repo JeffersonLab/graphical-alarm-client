@@ -3,7 +3,7 @@ import tempfile
 import tkinter as tk
 from tkinter import *
 
-
+from PyQt5.QtGui import QIcon, QPixmap, QImage
 DEPLOY = "ops"
 
 TEST = False
@@ -14,6 +14,7 @@ PRODUCER = None
 
 ACTIVEPANE = None
 SHELVEDPANE = None
+MODEL = None
 
 REGISTEREDALARMS = {}
 ACTIVEALARMS = {}
@@ -26,11 +27,16 @@ SMALL = "-*-helvetica-medium-r-medium-*-12-*-*-*-*-*-*-*"
 IMAGEPATH = "./"
 
 ALARMSTATUS = {
-   "MAJOR"     : {"color" : 'red',    "image" : None, "shelved" : None},
-   "MINOR"     : {"color" : 'yellow', "image" : None, "shelved" : None},
-   "ALARMING"  : {"color" : 'orange', "image" : None, "shelved" : None},
-   "ACK"       : {"color" : 'white' , "image" : None} ,
-   "NO_ALARM"  : {"color" : 'green' , "shelved" : None},
+   "MAJOR"     : {
+      "rank" : 3, "color" : 'red',    "image" : None, "shelved" : None},
+   "MINOR"     : {
+      "rank" : 1 , "color" : 'yellow', "image" : None, "shelved" : None},
+   "ALARMING"  : {
+      "rank" : 2, "color" : 'orange', "image" : None, "shelved" : None},
+   "ACK"       : {
+      "rank" : 2 ,"color" : 'white' , "image" : None} ,
+   "NO_ALARM"  : {
+      "rank" : 0, "color" : 'green' , "shelved" : None},
 }
 
 
@@ -38,12 +44,16 @@ ALARMSTATUS = {
 ####
 
 def GetAlarmType(msgtype) :
+   
    type = "StreamRuleAlarm"
    if ("EPICS" in msgtype) :
       type = "DirectCAAlarm"
+   
    return(type)
    
 
+def GetRank(status) :
+   return(ALARMSTATUS[status]['rank'])
 
 def WidgetExists(widget) :
    return(widget.winfo_exists())
@@ -58,8 +68,21 @@ def GetShelvedImage(status) :
          ALARMSTATUS[status]['shelved'] = image
       image = ALARMSTATUS[status]['shelved']
    return(image)
-   
+
 def GetStatusImage(status) :
+   image = None
+   color = GetStatusColor(status)
+   if (color != None) :
+      if (ALARMSTATUS[status]['image'] == None) :
+         filename = IMAGEPATH + color + "-ball.png"
+         image = QImage(filename)
+         pixmap = QPixmap.fromImage(image)
+         
+         ALARMSTATUS[status]['image'] = pixmap
+      image = ALARMSTATUS[status]['image']
+   return(image)
+
+def OldGetStatusImage(status) :
    image = None
    color = GetStatusColor(status)
    if (color != None) :
@@ -72,7 +95,13 @@ def GetStatusImage(status) :
    return(image)
          
       
-      
+def SetModel(model) :
+   global MODEL
+   MODEL = model
+
+def GetModel() :
+   return(MODEL)
+         
 def GetStatusColor(status) :
    color = None
    if (status in ALARMSTATUS.keys()) :
