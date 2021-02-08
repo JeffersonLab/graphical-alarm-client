@@ -11,7 +11,7 @@ RUN apt-get update \
     && git clone https://github.com/JeffersonLab/graphical-alarm-client \
     && cd ./graphical-alarm-client/scripts \
     && mkdir /scripts \
-    && cp * /scripts \
+    && cp -r * /scripts \
     && cd / \
     && chmod -R +x /scripts \
     && if [ -z "$CUSTOM_CRT_URL" ] ; then echo "No custom cert needed"; else \
