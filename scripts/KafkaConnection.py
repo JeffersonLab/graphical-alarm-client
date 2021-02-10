@@ -7,7 +7,7 @@ from datetime import datetime
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 from confluent_kafka import avro, Producer, Consumer
-from confluent_kafka.avro import CachedSchemaRegistryClient
+from confluent_kafka.avro.cached_schema_registry_client import CachedSchemaRegistryClient
 
 from confluent_kafka.avro.serializer.message_serializer import MessageSerializer as AvroSerde
 
@@ -17,7 +17,10 @@ from avro.schema import Field
 
 class KafkaConnection(object) :
    def __init__(self) :
-           
+       
+      self.categories = None
+      self.locations = None
+     
       self.topics = ['registered-alarms','active-alarms','shelved-alarms']
       self.schemamap = {}
       
@@ -36,32 +39,37 @@ class KafkaConnection(object) :
          if ("shelved" in topic) :
             continue
             
-         if (not topic in self.schemamap) :
-            self.schemamap[topic] = {}
-            self.schemamap[topic]['value'] = None
-            self.schemamap[topic]['key'] = None
+         if (topic in self.schemamap) :
+            continue
+         
+         self.schemamap[topic] = {}
+         self.schemamap[topic]['value'] = None
+         self.schemamap[topic]['key'] = None
          
          valueschema = topic + "-value"
          keyschema = topic + "-key" 
          try :          
-           
+            print("   ", topic)
             self.schemamap[topic]['value'] = \
                schema_registry.get_latest_schema(valueschema)[1]
-         
+            print(topic, "<",self.schemamap[topic]['value'],">")
             #Only "key schema" right now is the "active-alarms"
-            if ("active" in topic) :
-               self.schemamap[topic]['key'] = \
-                  schema_registry.get_latest_schema(keyschema)[1]
+           # if ("active" in topic) :
+            #   self.schemamap[topic]['key'] = \
+             #     schema_registry.get_latest_schema(keyschema)[1]
          except :
+            print(topic,"FAILED!***")
             pass
-              
-      #Get access to the latest list of categories and locations
-      latest_schema = self.schemamap['registered-alarms']['value']
-      categories = latest_schema.fields[2].type.symbols
-      locations = latest_schema.fields[1].type.symbols
       
-      self.categories = categories
-      self.locations = locations
+      if (self.schemamap['registered-alarms']['value'] != None) :
+         #Get access to the latest list of categories and locations
+         latest_schema = self.schemamap['registered-alarms']['value']
+         print("LATEST:",latest_schema)
+         categories = latest_schema.fields[2].type.symbols
+         locations = latest_schema.fields[1].type.symbols
+      
+         self.categories = categories
+         self.locations = locations
    
    #Accessors
    def GetCategories(self) :
