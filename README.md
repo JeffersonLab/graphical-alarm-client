@@ -44,3 +44,7 @@ _Linux_:
 -e DISPLAY=:0 -v $(pwd)/scripts:/scripts
 ```
 **Note**: This Docker container requires a local X-Windows server, on Microsoft Windows and Mac in particular you may need to launch one.
+
+
+Attributions:
+Some icons by Yusuke Kamiyamane. Licensed under a Creative Commons Attribution 3.0 License.

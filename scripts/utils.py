@@ -2,15 +2,17 @@ import datetime
 import tempfile  
 import tkinter as tk
 from tkinter import *
-
+import re 
 from PyQt5.QtGui import QIcon, QPixmap, QImage
+
+from KafkaConnection import *
+
 DEPLOY = "ops"
 
 TEST = False
-MAIN = None
+MANAGER = None
 ROOT = None
-PRODUCER = None
-
+CONSUMER = None
 
 ACTIVEPANE = None
 SHELVEDPANE = None
@@ -19,6 +21,7 @@ MODEL = None
 REGISTEREDALARMS = {}
 ACTIVEALARMS = {}
 SHELVEDALARMS = {}
+PRODUCERS = {}
 
 BIGBOLD = "-*-helvetica-medium-r-bold-*-16-*-*-*-*-*-*-*"
 SMALLBOLD =  "-*-helvetica-medium-r-bold-*-12-*-*-*-*-*-*-*"
@@ -36,7 +39,7 @@ ALARMSTATUS = {
    "ACK"       : {
       "rank" : 2 ,"color" : 'white' , "image" : None} ,
    "NO_ALARM"  : {
-      "rank" : 0, "color" : 'green' , "shelved" : None},
+      "rank" : 0, "color" : 'green' , "image" : None, "shelved" : None},
 }
 
 
@@ -52,8 +55,12 @@ def GetAlarmType(msgtype) :
    return(type)
    
 
-def GetRank(status) :
+def GetRank(status) :   
+   status = TranslateACK(status)   
+   if (status == None) :
+      return(None)
    return(ALARMSTATUS[status]['rank'])
+
 
 def WidgetExists(widget) :
    return(widget.winfo_exists())
@@ -70,8 +77,11 @@ def GetShelvedImage(status) :
    return(image)
 
 def GetStatusImage(status) :
+   
+   status = TranslateACK(status)
    image = None
    color = GetStatusColor(status)
+  
    if (color != None) :
       if (ALARMSTATUS[status]['image'] == None) :
          filename = IMAGEPATH + color + "-ball.png"
@@ -82,18 +92,6 @@ def GetStatusImage(status) :
       image = ALARMSTATUS[status]['image']
    return(image)
 
-def OldGetStatusImage(status) :
-   image = None
-   color = GetStatusColor(status)
-   if (color != None) :
-      if (ALARMSTATUS[status]['image'] == None) :
-         filename = IMAGEPATH + color + "-ball.png"
-         image = tk.PhotoImage(file=filename)
-         ALARMSTATUS[status]['image'] = image
-            
-      image = ALARMSTATUS[status]['image']
-   return(image)
-         
       
 def SetModel(model) :
    global MODEL
@@ -101,19 +99,42 @@ def SetModel(model) :
 
 def GetModel() :
    return(MODEL)
-         
+
+def TranslateACK(status) :
+   ack = status
+   if (status != None) :
+      match = re.search("(.*)_ACK",status)
+      if (match != None) :
+         ack = match.group(1)
+         if (ack == "NO") :
+            ack = status
+   return(ack)
+   
 def GetStatusColor(status) :
+   status = TranslateACK(status)
+      
    color = None
    if (status in ALARMSTATUS.keys()) :
       color = ALARMSTATUS[status]['color']
    return(color)
 
-def SetProducer(producer) :
-   global PRODUCER
-   PRODUCER = producer
+def SetConsumer(consumer) :
+   global CONSUMER
+   CONSUMER = consumer
 
-def GetProducer() :
-   return(PRODUCER)
+def GetConsumer() :
+   return(CONSUMER)
+   
+def SetProducer(producer,topic) :
+   global PRODUCERS
+   PRODUCERS[topic] = producer
+
+def GetProducer(topic) :
+   
+   if (not topic in PRODUCERS) :
+      producer = KafkaProducer(topic)
+      SetProducer(producer,topic)
+   return(PRODUCERS[topic])
    
 def SetRoot(root) :
    global ROOT
@@ -227,13 +248,13 @@ def SetTest(test) :
 def GetTest() :
    return(TEST)
 
-def SetMain(main) :
-   global MAIN
-   MAIN = main
+def SetManager(manager) :
+   global MANAGER
+   MANAGER = manager
 
 #Access to the main gui
-def GetMain() :
-   return(MAIN)   
+def GetManager() :
+   return(MANAGER)   
 
 #Determine if a widget exists
 def WidgetExists(widget) :

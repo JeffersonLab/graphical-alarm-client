@@ -1,53 +1,25 @@
 import os
 import pwd
 import types
-#import click
+import pytz
 import time
 from datetime import datetime
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 from confluent_kafka import avro, Producer, Consumer
 from confluent_kafka.avro import CachedSchemaRegistryClient
+
 from confluent_kafka.avro.serializer.message_serializer import MessageSerializer as AvroSerde
 
 from confluent_kafka.avro.serializer import SerializerError
 from confluent_kafka import OFFSET_BEGINNING
-
+from avro.schema import Field
 
 class KafkaConnection(object) :
    def __init__(self) :
-      
-      self.value_schema_str = """
-{
-   "type"      : "record",
-   "name"      : "ActiveAlarm",   
-   "namespace" : "org.jlab.kafka.alarms",
-   "doc"       : "Alarms currently alarming",
-   "fields"    : [
-     {
-       "name"    : "priority",
-       "type"    : {
-         "type"      : "enum",       
-         "name"      : "AlarmPriority",
-         "namespace" : "org.jlab.kafka.alarms",
-         "doc"       : "Enumeration of possible alarm priorities",
-         "symbols"   : ["P1_LIFE","P2_PROPERTY","P3_PRODUCTIVITY", "P4_DIAGNOSTIC"]
-       },
-       "doc"     : "Alarm severity organized as a way for operators to prioritize which alarms to take action on first"
-     },
-     {
-        "name"    : "acknowledged",
-        "type"    : "boolean",
-        "doc"     : "Indicates whether this alarm has been explicitly acknowledged - useful for latching alarms which can only be cleared after acknowledgement",
-        "default" : false        
-     }
-  ]
-}
-"""
-      
-      self.value_schema = avro.loads(self.value_schema_str)
-      #The topics to which we will subscribe
+           
       self.topics = ['registered-alarms','active-alarms','shelved-alarms']
+      self.schemamap = {}
       
       #Magic Kafka configuration
       bootstrap_servers = os.environ.get('BOOTSTRAP_SERVERS', 'localhost:9092')
@@ -58,12 +30,54 @@ class KafkaConnection(object) :
       self.avro_serde = AvroSerde(schema_registry)
       self.params = types.SimpleNamespace()
       
+      #Access the latest schema
+      for topic in self.topics :
+         #THIS IS JUST UNTIL SHELVING IS IMPLEMENTED
+         if ("shelved" in topic) :
+            continue
+            
+         if (not topic in self.schemamap) :
+            self.schemamap[topic] = {}
+            self.schemamap[topic]['value'] = None
+            self.schemamap[topic]['key'] = None
+         
+         valueschema = topic + "-value"
+         keyschema = topic + "-key" 
+         try :          
+            self.schemamap[topic]['value'] = \
+               schema_registry.get_latest_schema(valueschema)[1]
+            
+            #Only "key schema" right now is the "active-alarms"
+            if ("active" in topic) :
+               self.schemamap[topic]['key'] = \
+                  schema_registry.get_latest_schema(keyschema)[1]
+         except :
+            pass
+                    
+      #Get access to the latest list of categories and locations
+      latest_schema = self.schemamap['registered-alarms']['value']
+      categories = latest_schema.fields[2].type.symbols
+      locations = latest_schema.fields[1].type.symbols
+      
+      self.categories = categories
+      self.locations = locations
+   
+   #Accessors
+   def GetCategories(self) :
+      return(self.categories)
+      
+   def GetLocations(self) :
+      return(self.locations)
+         
    def GetTopic(self,msg) :
       return(msg.topic())
          
    def GetTopics(self) :
       return(self.topics) 
 
+#Create a KafkaProducer. This is a KafkaConnection that
+#PRODUCES and sends messages NOTE: Most of this has been
+#stolen from Ryan's examples
 class KafkaProducer(KafkaConnection) :
    def __init__(self,topic=None) :
       super(KafkaProducer,self).__init__()
@@ -74,11 +88,10 @@ class KafkaProducer(KafkaConnection) :
       self.producer = Producer({
          'bootstrap.servers': self.bootstrap_servers,
          'on_delivery': self.delivery_report})
-      
-      self.hdrs = [('user',pwd.getpwuid(os.getuid()).pw_name),
-     ('producer','set-active.py'),('host' ,os.uname().nodename)]
-
+      self.hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),
+         ('producer','AlarmManager'),('host',os.uname().nodename)]
    
+   #Report success or errors
    def delivery_report(self,err, msg):
     """ Called once for each message produced to indicate delivery result.
         Triggered by poll() or flush(). """
@@ -87,54 +100,65 @@ class KafkaProducer(KafkaConnection) :
     else:
         print('Message delivered')
    
+   #Create an acknowledge message
+   def AckMessage(self,name,ack) :
+      if (not "ACK" in ack) :
+         ack = ack + "_ACK"         
+      params = self.params
+      params.key = {"name": name, "type": "AckEPICS"}
+      params.value = {"msg": {"ack": ack}}
+      
+      self.SendMessage()
+   
+   #Send a message
    def SendMessage(self) :
       params = self.params
       topic = self.topic
       
+      value_schema = self.schemamap[topic]['value']
+      key_schema = self.schemamap[topic]['key']
+      
       if (params.value is None) :
          val_payload = None
-      else:
+      else:        
          val_payload = self.serialize_avro(topic, 
-            self.value_schema, params.value, 
-         is_key=False)
-
-      self.producer.produce(topic=topic, value=val_payload, key=params.key, 
+            value_schema, params.value, is_key=False)
+      
+      #Not all topics have an associated "key_schema"
+      #If it doesn't, use the params.key
+      if (key_schema != None) :
+         key_payload = self.serialize_avro(topic, key_schema, params.key, 
+            is_key=True)     
+      else :
+         key_payload = params.key
+                 
+      self.producer.produce(topic=topic, value=val_payload, key=key_payload, 
          headers=self.hdrs)
       self.producer.flush()
    
-   def AckMessage(self,name,priority) :
-      params = self.params
-      params.key = name
-      params.value = {"priority": priority,"acknowledged":True}
-      self.SendMessage()
-      
-   def ClearMessage(self,name) :
-      params = self.params
-      params.key = name
-      params.value = None
-      self.SendMessage()
-      
    def GetConnection(self) :
       return(self.producer)
 
 
-
-        
+#Create a KafkaConsumer. A KafkaConnection that subscribes and
+#receives messages. Again, most stolen from Ryan's examples        
 class KafkaConsumer(KafkaConnection) :
    def __init__(self) :
       super(KafkaConsumer,self).__init__()
+      
       #Make ourselves a consumer
       ts = time.time()
       self.consumer = Consumer({'bootstrap.servers': self.bootstrap_servers,
-         'group.id': 'AlarmMonitor.py' + str(ts)})
+         'group.id': 'AlarmManager' + str(ts)})
       
-      #And subscribe
+      #And subscribe to the list of topics
       self.consumer.subscribe(self.topics,on_assign=self.my_on_assign)
       
       #Initialize variables
       self.topicloaded = {}  #lets us know when a topic has been loaded.
       self.initalarms = {}   #initial set of alarms
       self.highoffsets = {}  #? 
+      
       #initialize topic dependent variables
       for topic in self.topics :
          self.topicloaded[topic] = False 
@@ -148,7 +172,7 @@ class KafkaConsumer(KafkaConnection) :
          'AckEPICS' : {},
          'shelved-alarms' : {}
       }
-      
+ 
    #We are assuming one partition, otherwise low/high would each be array and 
    #checking against high water mark would probably not work since other 
    #partitions could still contain unread messages. RYAN's MAGIC
@@ -175,11 +199,7 @@ class KafkaConsumer(KafkaConnection) :
       if (init) :
          polltime = 1.0
       msg = consumer.poll(polltime) 
-      
-      #if (msg is None or msg.error()) :     
-       #  return(msg) 
       return(msg)
-
    
    #Decode the topic message.
    def DecodeMessage(self,msg) :
@@ -203,16 +223,18 @@ class KafkaConsumer(KafkaConnection) :
    
    #Convert the timestamp into something readable
    def DecodeTimeStamp(self,msg) :
+      #timestamp from Kafka is in UTC
       timestamp = msg.timestamp()
       
+      #Work in utc time, then convert to local time zone.
       ts = datetime.fromtimestamp(timestamp[1]//1000)
-      return(ts)
-      #comes in ms, so need to convert to seconds
-      seconds = timestamp[1]/1000
-      ts = time.ctime(seconds)
-     
-      return(ts)
-   
+      utc_ts = pytz.utc.localize(ts)
+      
+      #Finally convert to EST.
+      est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
+  
+      return(est_ts)
+  
    #Determine if all topics have completed loading.
    def TopicsLoaded(self) :
       loaded = True
@@ -220,8 +242,4 @@ class KafkaConsumer(KafkaConnection) :
          if (not self.topicloaded[topic]) :
             loaded = False
       return(loaded)
-
-
-
-
 
