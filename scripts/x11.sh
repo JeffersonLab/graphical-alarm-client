@@ -16,7 +16,8 @@ echo $ip
 
 
 #New code from Ryan
-docker-compose build —no-cache gui
+update docker-compose.yml
+docker-compose build -—no-cache gui
 
 
 #run script
@@ -25,6 +26,7 @@ docker exec -u root -it gui bash
 python3 AlarmManager.py
 
 run console in kafka-alarms directory
+docker exec -it console bash
 
 REMEMBER TO CHECK IP=DOCKER_DISPLAY if getting display errors
 
@@ -35,7 +37,7 @@ TO DO:
 
 Command=line editor = nano
 
-
+./set-registered.py --producerpv VAL --location INJ --category Misc --latching --docurl "" --edmpath "" LATCHING
 
 pyQT5 --
    apt-get update

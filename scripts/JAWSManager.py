@@ -4,6 +4,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QObject,QThreadPool
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog,QMenu
 
+#from AlarmManager import *
+
 from AlarmProcessor import *
 from AlarmThread import *
 from AlarmModelView import *
@@ -16,15 +18,18 @@ class MyProxyModel(QtCore.QSortFilterProxyModel) :
       self.setDynamicSortFilter(True)
 
 
-class AlarmToolBar(QtWidgets.QToolBar) :
+class ToolBar(QtWidgets.QToolBar) :
    def __init__(self,parent,*args,**kwargs) :
-      super(AlarmToolBar,self).__init__(*args,**kwargs)
+      super(ToolBar,self).__init__(*args,**kwargs)
       
       self.parent = parent
       self.parent.filterDialog = None
             
       filteraction = FilterAction(self)
       self.addAction(filteraction)
+      
+ #     shelveaction = ShelveAction(self)
+  #    self.addAction(shelveaction)
    
    def showFilter(self,state) :
       dialog = self.parent.filterDialog
@@ -34,38 +39,37 @@ class AlarmToolBar(QtWidgets.QToolBar) :
          dialog.show()
 
 #Only one widget for a main window
-class MainWindow(QtWidgets.QMainWindow) :
-   def __init__(self,*args,**kwargs) :
-      super(MainWindow,self).__init__(*args,**kwargs)
+class JAWSManager(QtWidgets.QMainWindow) :
+   def __init__(self,title,type,*args,**kwargs) :
+      super(JAWSManager,self).__init__(*args,**kwargs)
       
       self.data = [] 
-      
-      self.setWindowTitle("JAWS")
-      self.filterDialog = None
-      self.toolbar = AlarmToolBar(self)
+      self.type = type
+      self.setWindowTitle(title)
+      self.filterDialog = None     
+      self.toolbar = ToolBar(self)  
       self.addToolBar(self.toolbar)
       ###
-      proxymodel = AlarmProxyModel()      
+      proxymodel = self.ProxyModel()      
       self.proxymodel = proxymodel
       
       #Create the TableView widget that will display the alarm model
-      self.alarmtable = AlarmTable()
-      self.alarmtable.sortByColumn(3,1)   
+      self.tableview = self.TableView()
       
       #Create the alarmmodel that will be displayed in the table
-      self.alarmmodel = AlarmModel(self.data)
+      self.modelview = self.ModelView()
       
       #Assign the model to the table
-      self.alarmtable.setModel(proxymodel)
-      self.alarmtable.setSortingEnabled(True)
+      self.tableview.setModel(proxymodel)
+      self.tableview.setSortingEnabled(True)
       
-      self.proxymodel.setSourceModel(self.alarmmodel)
+      self.proxymodel.setSourceModel(self.modelview)
       self.proxymodel.setFilterKeyColumn(3)
       
       #Put the table in the main widget's layout.
       #Need to have a layout for its size hint.
       layout = QtWidgets.QGridLayout()
-      layout.addWidget(self.alarmtable)
+      layout.addWidget(self.tableview)
       self.layout = layout
       
       #Total misnomer. This command grows and shrinks the main window
@@ -84,16 +88,14 @@ class MainWindow(QtWidgets.QMainWindow) :
       QtWidgets.QShortcut("Ctrl+C", self, activated=self.closeEvent)
 
       #Make the main window and the model available      
-      SetMain(self)
-      SetModel(self.alarmmodel)
-      
-      self.alarmtable.setColumnWidth(2,200)
-      self.alarmtable.setColumnWidth(3,150)
-
+      SetManager(self)
+      SetModel(self.modelview)
+    
+ 
       #Show the results
       self.setCentralWidget(widget)
       self.show()
-
+   
       #Set up the threading
       self.processor = AlarmProcessor()
       self.threadpool = QThreadPool()
@@ -126,14 +128,15 @@ class MainWindow(QtWidgets.QMainWindow) :
    def closeEvent(self,event) :
       self.stopWorker()
       sys.exit(0)
+   
    #Access the AlarmTable
    def getTable(self) :
-      return(self.alarmtable) 
+      return(self.tableview) 
     
 
       
-app = QtWidgets.QApplication(sys.argv)
-
-window = MainWindow()
+#app = QtWidgets.QApplication(sys.argv)
+#window = AlarmManager()
+#window = JAWSManager("HELLO","MAN")
 #window.show()
-app.exec()
+#app.exec()

@@ -8,19 +8,25 @@ class AlarmProcessor(object) :
    def __init__(self,root=None) :      
       self.root = root
       
+      
       #Create the KafkaConsumer. To listen for messages.
       self.kafkaconsumer = KafkaConsumer()
-      
+      SetConsumer(self.kafkaconsumer)
+
       #The topics to which we will subscribe
       self.topics = self.kafkaconsumer.GetTopics()
-         
+      
       self.topicloaded = {}
       self.initalarms = {}
-      
+
       #initialize topic dependent variables
       for topic in self.topics :
          self.topicloaded[topic] = False 
          self.initalarms[topic] = {}
+    #     producer = KafkaProducer(topic)
+     #    SetProducer(producer,topic)
+     #    self.kafkaproducers[topic] = KafkaProducer(topic)
+         
       
       #only wait so long for startup alarms      
       self.initcount = 0
@@ -38,8 +44,9 @@ class AlarmProcessor(object) :
       topic = msg.topic()
       alarm = None
       
+      
       if (topic == "registered-alarms") :  
-              
+            
          alarm = self.RegisteredAlarm(msg)        
       if (topic == "active-alarms") :   
          
@@ -49,8 +56,7 @@ class AlarmProcessor(object) :
          alarm = self.ShelvedAlarm(msg)          
       return(alarm) 
  
-      
-        
+              
    #Get the initial state of the alarm handler system. 
    #There will be a flurry of alarms upon start up. 
    #Assign them as appropriate. We only want the most
@@ -107,14 +113,13 @@ class AlarmProcessor(object) :
    def IsRegistered(self,alarmname) :
       registered = True
       
+      registered = False
       alarm = FindRegAlarm(alarmname) 
       if (alarm != None) :
          definition = alarm.definition
          if (definition is None) :
             registered = False
-      #else :
-       
-       #  print(alarmname, "NOT REGISERED!!")
+      
       return(registered)
    
    #Once all topics are loaded. We have the most recent
@@ -128,13 +133,9 @@ class AlarmProcessor(object) :
          registered = self.IsRegistered(alarmname)
          alarm = active[alarmname]
          
-         if (not registered) :
-            print("NOT REG:",alarm) ###NOT SURE IF WE NEED THIS YET
+         alarm.Activate()         
+         alarm.registered = registered
          
-         if (registered and alarm.GetStatus()) :
-            
-            alarm.Activate()
-      
       shelved = self.initalarms['shelved-alarms']
       for alarmname in shelved.keys() :
          alarm = shelved[alarmname]
@@ -165,13 +166,8 @@ class AlarmProcessor(object) :
       alarm = self.CreateAlarm(msg)
       #If an active-alarm, activate it.
       if (topic == "active-alarms") :               
-         
+        
          alarm.Activate()
-      #   sortcolumn = GetMain().proxymodel.filterKeyColumn()
-         
-       #  sortorder = GetMain().proxymodel.sortOrder()
-        # print("SETTING SORT:",sortcolumn,sortorder)
-        # GetMain().getTable().sortByColumn(sortcolumn,sortorder)
          
       elif (topic == "shelved-alarms") :
          if (alarm.GetShelfStatus() != None) :
@@ -189,11 +185,10 @@ class AlarmProcessor(object) :
       (alarmname,status,msgtype) = kafkaconsumer.DecodeMessage(msg)     
       timestamp = kafkaconsumer.DecodeTimeStamp(msg)
       
-      
       #Is this alarm registered? If so, we will not create a 
       #new one,simply reconfigure this one.
       alarm = FindAlarm(alarmname) 
-     
+      
       #Can't find an alarm, create a new one. Notice that it's not
       #completely defined. The active-alarm came in before the registered-alarm
       #that contains the definition. We still need to figure out the type
@@ -202,12 +197,14 @@ class AlarmProcessor(object) :
          type = GetAlarmType(msgtype)
          alarm = MakeAlarm(alarmname,type)
       
-      if ("Ack" in msgtype) :
-         alarm.SetAck(timestamp,status)
+      #An acknowledgement message from the active-alarms topic
+      if ("Ack" in msgtype) :       
+         #Alarm has been acknowledged
+         alarm.ReceiveAck(timestamp,status)
       else :
-         #Set the alarm's status             
-         alarm.SetStatus(timestamp,status)
-      
+         #Set the alarm's sevr/status       
+         alarm.SetAlarming(timestamp,status)
+             
       #And add it to the master list of active-alarms         
       AddActiveAlarm(alarm)
       return(alarm)
@@ -231,18 +228,20 @@ class AlarmProcessor(object) :
       #When registering an alarm, the msg is the alarm definition
       (alarmname,definition,msgtype) = consumer.DecodeMessage(msg)
       
+
       #It is possible that an active alarm comes in before it has been
       #registered. 
       alarm = FindAlarm(alarmname)
-      
       #Is there already an alarm for this alarmname?
       #If so, reconfigure it.
       if (alarm != None) :
+         
          alarm.Configure(definition)
       else :
          #if not, create a new one.
          alarm = MakeAlarm(alarmname,None,definition)
-           
+      
+      alarm.Activate()
       #Register the alarm. Even if one exists with the same name.
       AddRegAlarm(alarm)
       return(alarm)
