@@ -69,7 +69,7 @@ console:
       - ./schemas:/schemas
       - ./config:/config
       - ./plugins:/plugins
-      - ./examples/alarm-registrations:/tmp/alarm-registrations"
+      - ./examples/alarm-registrations:/tmp/alarm-registrations
     networks:
       - graphnet
 
