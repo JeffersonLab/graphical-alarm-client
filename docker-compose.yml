@@ -46,12 +46,8 @@ services:
     networks:
       - graphnet
 
-console:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
+  console:
+    image: slominskir/kafka-alarm-system:1.3.1
     tty: true
     stdin_open: true
     hostname: console
@@ -64,12 +60,6 @@ console:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
       ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/|/,alarm2|channel2|INJ|RF|/|/,alarm3|channel3|INJ|RF|/|/"
-    volumes:
-      - ./scripts:/scripts
-      - ./schemas:/schemas
-      - ./config:/config
-      - ./plugins:/plugins
-      - ./examples/alarm-registrations:/tmp/alarm-registrations
     networks:
       - graphnet
 
