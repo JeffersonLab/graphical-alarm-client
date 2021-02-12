@@ -9,13 +9,13 @@ from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog,QMenu
 
 from JAWSManager import *
 
-class AlarmManager(JAWSManager) :
+class ShelfManager(JAWSManager) :
    def __init__(self,*args,**kwargs) :
-      super(AlarmManager,self).__init__("JAWS - Active Alarm Manager","alarm",
+      super(ShelfManager,self).__init__("JAWS - Alarm Shelf","shelf",
          *args,**kwargs)
      
-      self.tableview.setColumnWidth(2,200)
-      self.tableview.setColumnWidth(3,150)
+  #    self.tableview.setColumnWidth(2,200)
+   #   self.tableview.setColumnWidth(3,150)
       
       
    def ProxyModel(self) :
@@ -24,20 +24,18 @@ class AlarmManager(JAWSManager) :
       return(proxymodel)
    
    def TableView(self) :
-      tableview = AlarmTable()
-      tableview.sortByColumn(3,1)
+      tableview = ShelfTable()
+     # tableview.sortByColumn(3,1)
       return(tableview)
    
    def ModelView(self) :
-      modelview = AlarmModel(self.data) 
-      
+      modelview = ShelfModel(self.data)       
       return(modelview)
-   
+      
    def StartProcessor(self) :
-      self.processor = AlarmProcessor()
-      print("STARTPROCESSOR:",self.processor)
+      self.processor = ShelfProcessor()
       
 app = QtWidgets.QApplication(sys.argv)
-window = AlarmManager()
+window = ShelfManager()
 
 app.exec()

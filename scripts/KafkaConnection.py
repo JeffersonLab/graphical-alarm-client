@@ -36,8 +36,8 @@ class KafkaConnection(object) :
       #Access the latest schema
       for topic in self.topics :
          #THIS IS JUST UNTIL SHELVING IS IMPLEMENTED
-         if ("shelved" in topic) :
-            continue
+      #   if ("shelved" in topic) :
+       #     continue
             
          if (topic in self.schemamap) :
             continue
@@ -49,27 +49,26 @@ class KafkaConnection(object) :
          valueschema = topic + "-value"
          keyschema = topic + "-key" 
          try :          
-            print("   ", topic)
+           
             self.schemamap[topic]['value'] = \
                schema_registry.get_latest_schema(valueschema)[1]
-            print(topic, "<",self.schemamap[topic]['value'],">")
+            
             #Only "key schema" right now is the "active-alarms"
-           # if ("active" in topic) :
-            #   self.schemamap[topic]['key'] = \
-             #     schema_registry.get_latest_schema(keyschema)[1]
+            if ("active" in topic) :
+               self.schemamap[topic]['key'] = \
+               schema_registry.get_latest_schema(keyschema)[1]
          except :
             print(topic,"FAILED!***")
             pass
       
-      if (self.schemamap['registered-alarms']['value'] != None) :
-         #Get access to the latest list of categories and locations
-         latest_schema = self.schemamap['registered-alarms']['value']
-         print("LATEST:",latest_schema)
-         categories = latest_schema.fields[2].type.symbols
-         locations = latest_schema.fields[1].type.symbols
+      latest_schema = self.schemamap['registered-alarms']['value']
       
-         self.categories = categories
-         self.locations = locations
+     
+      categories = latest_schema.fields[2].type.symbols
+      locations = latest_schema.fields[1].type.symbols
+      
+      self.categories = categories
+      self.locations = locations
    
    #Accessors
    def GetCategories(self) :
@@ -113,9 +112,9 @@ class KafkaProducer(KafkaConnection) :
    def AckMessage(self,name,ack) :
       if (not "ACK" in ack) :
          ack = ack + "_ACK"         
-      print("ACK:",ack)
+     
       params = self.params
-      params.key = {"name": name, "type": "AckEPICS"}
+      params.key = {"name": name, "type": "EPICSAck"}
       params.value = {"msg": {"ack": ack}}
       
       self.SendMessage()
@@ -133,15 +132,13 @@ class KafkaProducer(KafkaConnection) :
       else:        
          val_payload = self.serialize_avro(topic, 
             value_schema, params.value, is_key=False)
-      print(params.key)
+      
       #Not all topics have an associated "key_schema"
       #If it doesn't, use the params.key
-      if (key_schema != None) :
-         key_payload = self.serialize_avro(topic, key_schema, params.key, 
+     
+      key_payload = self.serialize_avro(topic, key_schema, params.key, 
             is_key=True)     
-      else :
-         key_payload = params.key
-           
+          
       self.producer.produce(topic=topic, value=val_payload, key=key_payload, 
          headers=self.hdrs)
       self.producer.flush()
