@@ -4,11 +4,10 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 
 from utils import *
-      
-#Extend the table view for our own AlarmTable
-class AlarmTable(QtWidgets.QTableView) :
+
+class TableView(QtWidgets.QTableView) :
    def __init__(self,*args,**kwargs) :
-      super(AlarmTable,self).__init__(*args,**kwargs)
+      super(TableView,self).__init__(*args,**kwargs)
       
       #Adjusts columns to contents
       self.setSizeAdjustPolicy(
@@ -17,6 +16,19 @@ class AlarmTable(QtWidgets.QTableView) :
       #Expands table if more rows added.
       self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
          QtWidgets.QSizePolicy.MinimumExpanding)
+
+
+
+class ShelfTable(TableView) :
+   def __init__(self,*args,**kwargs) :
+      super(ShelfTable,self).__init__(*args,**kwargs)
+      
+           
+#Extend the table view for our own AlarmTable
+class AlarmTable(TableView) :
+   def __init__(self,*args,**kwargs) :
+      super(AlarmTable,self).__init__(*args,**kwargs)
+      
       self.setItemDelegateForColumn(1,StatusDelegate(self))
       self.setItemDelegateForColumn(0,StatusDelegate(self))
    
@@ -41,10 +53,9 @@ class AlarmTable(QtWidgets.QTableView) :
          #and find the row that is associated with the selected alarm(s)
          source_row = proxymodel.mapToSource(proxy_index).row()
          alarm = sourcemodel.data[source_row]
-         print(alarm.GetName(),alarm.GetLatchSevr())
          if (alarm.GetLatchSevr() != None and
             not "NO_ALARM" in alarm.GetLatchSevr()) :
-            print("   NEEDS ACK")
+            
             needsack.append(alarm)
                 
       ackaction = None
@@ -67,10 +78,17 @@ class ModelView(QtCore.QAbstractTableModel) :
    def __init__(self,data=None,parent = None, *args) :
       super(ModelView,self).__init__(parent,*args) 
       self.data = data or []
-      
+   
+   
+   #rowCount must be overloaded. 
+   #Overload it here, since the same for all children
+   
+   def rowCount(self,index) :
+      return(len(self.data))
+   
+   
    #Add alarm to the data. 
    def addAlarm(self,alarm) :
-      
       if (alarm in self.data) :
          self.data.remove(alarm)
       
@@ -99,8 +117,99 @@ class ModelView(QtCore.QAbstractTableModel) :
          filters = GetManager().filterDialog
          if (filters != None) :
             filters.applyFilters()
-
    
+   #Configure the header if filtered      
+   def setFilter(self,column,filtered=False) :
+      try :
+         if (not filtered) :
+            self.filtercols[column] = False
+         else :
+            self.filtercols[column] = True
+         self.headerDataChanged.emit(Qt.Horizontal,column,column)
+      except :
+         pass
+
+class ShelfModel(ModelView) :
+   def __init__(self,data=None,parent=None,*args) :
+      super(ShelfModel,self).__init__(data,parent,*args)
+   
+   
+      #rowCount must be overloaded
+   def rowCount(self,index) :
+      return(len(self.data))
+   
+   #columnCount must be overloaded
+   def columnCount(self,index) :      
+      return(4)
+   
+   #Display headers for the columns
+   def headerData(self,section,orientation,role) :
+      
+      if (role != Qt.DisplayRole and role != Qt.DecorationRole) :
+         return
+      if (orientation != Qt.Horizontal) :
+         return      
+      
+      try :
+         #Try to add the filter image to the header to show it's filtered 
+         if (role == Qt.DecorationRole and self.filtercols[section]) :
+            return (QtGui.QPixmap("funnel--plus.png"))
+         elif (role == Qt.DecorationRole) :
+            return("") 
+      except : 
+         return("")
+      
+      if (role == Qt.DisplayRole) :
+         
+         if (section == 0) :
+            return("Name")
+         if (section == 1) :
+            return("Date Shelved")
+         if (section == 2) :
+            return("Exp Date")
+         if (section == 3) :
+            return("Time Left")
+   #      if (section == 4) :
+    #        return("Category")
+     #    if (section == 5) :
+      #      return("Area")
+      return(QtCore.QAbstractTableModel.headerData(self,section,orientation,role))
+   
+   
+   #Overloaded function that must be defined.      
+   def data(self,index,role) :
+      #The index (contains both x,y) and role are passed.  
+      #The roles give instructions about how to display the model.
+      row = index.row()
+      col = index.column()
+            
+      #Center columns
+      if (role == Qt.TextAlignmentRole) : 
+         return(Qt.AlignCenter)
+         
+      #Insert the appropriate information into the display, based
+      #on the column. Column "0" is handled by the StatusDelegate
+      if role == Qt.DisplayRole :
+         alarm = self.data[row] 
+        
+         if (col == 0) :
+            return(alarm.GetName())
+        # if (col == 1) :
+         #   return(sevr)
+         #if (col == 2) :
+          #  return(alarm.GetName())
+         #if (col == 3) :              
+          #  timestamp = alarm.GetTimeStamp()
+            
+           # if (timestamp == None) :
+            #   timestamp = alarm.GetAckTime()
+            #return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+         #if (col == 4) :
+          #  return(alarm.GetCategory())
+        # if (col == 5) :
+         #   return(alarm.GetLocation())  
+
+       
 #AlarmModel contains the data to disaply in the TableView widget    
 class AlarmModel(ModelView) :
    def __init__(self,data=None,parent = None, *args) :
@@ -178,10 +287,6 @@ class AlarmModel(ModelView) :
      
       return(sevrdisplay,latchdisplay)
    
-   #rowCount must be overloaded
-   def rowCount(self,index) :
-      return(len(self.data))
-   
    #columnCount must be overloaded
    def columnCount(self,index) :      
       return(6)
@@ -219,16 +324,6 @@ class AlarmModel(ModelView) :
             return("Area")
       return(QtCore.QAbstractTableModel.headerData(self,section,orientation,role))
    
-   #Configure the header if filtered      
-   def setFilter(self,column,filtered=False) :
-      try :
-         if (not filtered) :
-            self.filtercols[column] = False
-         else :
-            self.filtercols[column] = True
-         self.headerDataChanged.emit(Qt.Horizontal,column,column)
-      except :
-         pass
 
 #The latched and status column (col=0, col=1) 
 #Displays the status indicators.
@@ -261,9 +356,9 @@ class StatusDelegate(QtWidgets.QStyledItemDelegate) :
             y = option.rect.center().y() - image.rect().height() / 2
             painter.drawPixmap(x, y, image)
 
-class AlarmProxyModel(QtCore.QSortFilterProxyModel) :
+class ProxyModel(QtCore.QSortFilterProxyModel) :
    def __init__(self,*args,**kwargs) :
-      super(AlarmProxyModel,self).__init__(*args,**kwargs)
+      super(ProxyModel,self).__init__(*args,**kwargs)
       self.filtercol = None
       
    def setFilter(self,column,filtered=False) :

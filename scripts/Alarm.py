@@ -7,26 +7,30 @@ from AlarmProperties import *
 #Figure out what type of alarm we're dealing with.
 def ExtractAlarmType(definition) :
    type = "StreamRuleAlarm"
-   
+     
    producer = definition['producer']  
    if ('pv' in producer) :
       type = "DirectCAAlarm"   
    return(type)
 
+#WORKS FOR ALARM MANAGER
 #Create an alarm of the correct type
-def MakeAlarm(alarmname,type,params=None) :
+def MakeAlarm(alarmname,type=None,params=None) :
    alarm = None
-  
+   
    if (type == None) :
       type = ExtractAlarmType(params)
-   
+ 
    if (type == "DirectCAAlarm") :
       alarm = EpicsAlarm(alarmname,params)
    elif (type == "StreamRuleAlarm") :
       alarm = StreamRuleAlarm(alarmname,params)
+   elif (type == None) :
+      alarm = Alarm(alarmname,params) 
+      
    return(alarm)
 
-     
+      
 #Encapsulate an alarm object
 class Alarm(object) :
    
@@ -35,11 +39,12 @@ class Alarm(object) :
       self.name = name
       self.type = type
       self.definition = params
-      self.registered = False
+      
       self.propwidget = None
       self.ack = False      
       self.latched = True
       self.latchsevr = None
+      self.isshelved = False
       
       #Timestamps displayed on GUI. 
       #timestamp = time of ACTIVE ALARM
@@ -50,7 +55,8 @@ class Alarm(object) :
       self.cleartime = None
    
       self.debug = False
-         
+   
+  
    #If alarm already exists, replace previous definition.
    def Configure(self,params) :
       self.definition = params      
@@ -112,17 +118,17 @@ class Alarm(object) :
    
       
    #Activate an alarm. Add or Remove from AlarmModel
-   def Activate(self) :      
+   #####WORKS FOR ALARM MANAGER
+   def Activate(self) :            
       #Alarms that latch are a little more complicated when
       #determining whether not they are removed or displayed     
       sevr = self.GetSevr()
       self.SetLatchSevr()
-      
       latched = self.GetLatchSevr()
-      
+         
       #The alarm has been acknowledged (if necessary) and cleared
       if ((latched == None or latched == "NO_ALARM")  and 
-         (sevr == None or sevr == "NO_ALARM")) :
+         (sevr == None or sevr == "NO_ALARM") or self.IsShelved()) :
          self.Remove()
       
       #The alarm is in, and does not need to be acknowledged
@@ -132,7 +138,49 @@ class Alarm(object) :
       #alarm is latched
       elif (latched != None) :                
          self.Display()
-                 
+   
+   #########        SHELVING   #################
+   def IsShelved(self) :
+      return(self.isshelved)
+   
+   def Shelve(self) :
+     
+      self.isshelved = True
+      
+   def UnShelve(self) :
+      self.isshelved = False
+      
+   def SetShelvingStatus(self,ts,shelfstatus) :
+      if (shelfstatus == None) :
+         self.shelfstatus = None
+         return
+         
+      duration = shelfstatus
+      reason = None
+      expiration = None
+      if (shelfstatus != None) :
+         if ('expiration' in shelfstatus['duration']) :
+            expiration = shelfstatus['duration']['expiration']
+         if ('reason' in shelfstatus['duration']) :
+            reason = shelfstatus['duration']['reason']
+            
+      self.shelfstatus = (ts,expiration,reason)
+   
+   def GetShelfExpiration(self) :
+      
+      (ts,exp,reason) = self.shelfstatus
+      return(exp)
+   
+   def GetShelfTimeStamp(self) :
+      (ts,exp,reason) = self.shelfstatus
+      return(ts)
+   
+   def GetShelfReason(self) :
+      (ts,exp,reason) = self.shelfstatus
+      return(reason)
+      
+   
+              
    #Remove an inactive alarm from the alarm model
    def Remove(self) :
       GetModel().removeAlarm(self)
@@ -246,7 +294,6 @@ class EpicsAlarm(Alarm) :
       producer = GetProducer('active-alarms')
           
       status = self.GetLatchSevr()
-      print("STATUS:",status)
       if (status) :
          producer.AckMessage(self.GetName(),status)
         
@@ -271,3 +318,6 @@ class StreamRuleAlarm(Alarm) :
       
       self.alarming = False
 ################################################   
+
+
+

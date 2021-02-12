@@ -95,16 +95,17 @@ class JAWSManager(QtWidgets.QMainWindow) :
       #Show the results
       self.setCentralWidget(widget)
       self.show()
-   
-      #Set up the threading
-      self.processor = AlarmProcessor()
-      self.threadpool = QThreadPool()
       
+      
+      #Set up the threading
+      self.StartProcessor()      
+      self.threadpool = QThreadPool()      
       self.startWorker()
    
       
    #Create and start the worker.
    def startWorker(self) :
+     
       #The function that the worker will call
       self.worker = Worker(self.processor.GetAlarms) 
       
