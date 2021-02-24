@@ -1,11 +1,16 @@
 import sys
+import os
+#import subprocess
+
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QObject,QThreadPool
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
 
 from AlarmModelView import *
+#from MenuActions import *
 from utils import *
 
+      
 #Abstract listbox with filter choices
 class FilterList(QtWidgets.QWidget) :
    def __init__(self,text,parent=None) :
@@ -154,31 +159,25 @@ class StatusFilter(FilterList) :
    
    def GetFilterVal(self,alarm) :
       return(alarm.GetSevr())
-      
+
+        
 class FilterDialog(QtWidgets.QDialog) :
-   def __init__(self,parent=None,*args,**kwargs) :
+   def __init__(self,title,parent=None,*args,**kwargs) :
       super(FilterDialog,self).__init__(parent,*args,**kwargs)
       
+      self.filters = []
       self.setModal(0)
       self.setSizeGripEnabled(True)
+      self.AddFilters()
       
-      self.filters = []
-  
-      statusfilter = StatusFilter(self)
-      locationfilter = LocationFilter(self)
-      categoryfilter = CategoryFilter(self)
-      
-      self.filters.append(statusfilter)
-      self.filters.append(locationfilter)
-      self.filters.append(categoryfilter)
-      
+      col = 0
       layout = QtWidgets.QGridLayout()     
-      layout.addWidget(statusfilter,1,0)
-      layout.addWidget(categoryfilter,1,1)
-      layout.addWidget(locationfilter,1,2)
+      for filter in self.filters :
+         layout.addWidget(filter,1,col)
+         col = col + 1
       
       
-      groupbox = QtWidgets.QGroupBox("Filter Active Alarms")
+      groupbox = QtWidgets.QGroupBox(title)
       groupbox.setLayout(layout) 
       
       vlayout = QtWidgets.QVBoxLayout()
@@ -196,25 +195,66 @@ class FilterDialog(QtWidgets.QDialog) :
          alarmlist = filtered
       
       #Create a new alarm model with the selected data  
-      alarmmodel = AlarmModel(alarmlist)
-      for alarm in alarmmodel.data :
-         print("KEEPING:",alarm.GetName())
-      print("----")
+      model = self.NewModel(alarmlist)
       
- #     print("ALARMODEL:",alarmmodel)
       #Set this new model to as the source model for our proxy
-      GetManager().proxymodel.setSourceModel(alarmmodel)
-  #    print("MANGAER:",GetManager())
-      alarmmodel.filtercols = {}
+      GetManager().proxymodel.setSourceModel(model)
+      
+      model.filtercols = {}
       #Add the filter icons if applicable
-      for filter in self.filters :
-         
-         col = filter.getHeaderColumn()
-        
+      for filter in self.filters :        
+         col = filter.getHeaderColumn()        
          if (filter.addHeader()) :
-            alarmmodel.setFilter(col,filtered=True) 
+            model.setFilter(col,filtered=True) 
          else :
-            alarmmodel.setFilter(col,filtered=False)
+            model.setFilter(col,filtered=False)
+
+class AlarmFilterDialog(FilterDialog) :
+   def __init__(self,parent=None,*args,**kwargs) :
+      super(AlarmFilterDialog,self).__init__(
+         "Filter Active Alarms",parent,*args,**kwargs) 
+   
+   def AddFilters(self) :
+      statusfilter = StatusFilter(self)
+      locationfilter = LocationFilter(self)
+      categoryfilter = CategoryFilter(self)
+      
+      self.filters.append(statusfilter)     
+      self.filters.append(categoryfilter)
+      self.filters.append(locationfilter)
+   
+   def NewModel(self,data) :
+
+      return(AlarmModel(data))
+
+class ShelfFilterDialog(FilterDialog) :
+   def __init__(self,parent=None,*args,**kwargs) :
+      super(ShelfFilterDialog,self).__init__("Filter Shelved Alarms",
+         parent,*args,**kwargs) 
+   
+   def AddFilters(self) :
+      categoryfilter = CategoryFilter(self)
+      locationfilter = LocationFilter(self)
+      self.filters.append(categoryfilter)
+      self.filters.append(locationfilter)
+      
+  
+   def NewModel(self,data) :
+      return(ShelfModel(data))
+
+class ShelfAction(QtWidgets.QAction) :
+   def __init__(self,parent,*args,**kwargs) :
+      super(ShelfAction,self).__init__(parent,*args,**kwargs)
+      
+      self.parent = parent
+      icon = QtGui.QIcon("address-book--plus.png")
+      text = "Shelf Manager"
+      tip = "Shelf Manager"
+      self.setIcon(icon)
+      self.setIconText(text)
+      self.setToolTip(tip)
+      
+      self.triggered.connect(parent.showShelfConfig)
 
          
 class FilterAction(QtWidgets.QAction) :

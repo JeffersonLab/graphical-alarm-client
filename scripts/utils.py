@@ -3,6 +3,9 @@ import tempfile
 import tkinter as tk
 from tkinter import *
 import re 
+#import psutil
+import pytz
+import time
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 
 from KafkaConnection import *
@@ -11,12 +14,14 @@ DEPLOY = "ops"
 
 TEST = False
 MANAGER = None
-ROOT = None
+
 CONSUMER = None
+PROCESSOR = None
 
 ACTIVEPANE = None
 SHELVEDPANE = None
 MODEL = None
+TABLE = None
 
 REGISTEREDALARMS = {}
 ACTIVEALARMS = {}
@@ -42,10 +47,27 @@ ALARMSTATUS = {
       "rank" : 0, "color" : 'green' , "image" : None, "shelved" : None},
 }
 
-
+SOURCEDIR = "./"
    
 ####
+def checkIfProcessRunning(name) :
+   return False
+   for proc in psutil.process_iter() :
+      try :
+         print(name.lower(), proc.name().lower())
+         if (name.lower() in proc.name().lower()) : return True
+         
+      except :
+         pass
+      return False
 
+def SetProcessor(processor) :
+   global PROCESSOR
+   PROCESSOR = processor
+   
+def GetProcessor() :
+   return(PROCESSOR)
+   
 def GetAlarmType(msgtype) :
    
    type = "StreamRuleAlarm"
@@ -54,6 +76,14 @@ def GetAlarmType(msgtype) :
    
    return(type)
    
+def ConvertTimeStamp(seconds) :
+   #Work in utc time, then convert to local time zone.
+   ts = datetime.fromtimestamp(seconds//1000)
+   utc_ts = pytz.utc.localize(ts)
+      
+   #Finally convert to EST.
+   est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
+   return(est_ts)
 
 def GetRank(status) :   
    status = TranslateACK(status)   
@@ -79,6 +109,7 @@ def GetShelvedImage(status) :
 def GetStatusImage(status) :
    
    status = TranslateACK(status)
+  
    image = None
    color = GetStatusColor(status)
   
@@ -101,6 +132,7 @@ def GetModel() :
    return(MODEL)
 
 def TranslateACK(status) :
+   
    ack = status
    if (status != None) :
       match = re.search("(.*)_ACK",status)
@@ -136,12 +168,6 @@ def GetProducer(topic) :
       SetProducer(producer,topic)
    return(PRODUCERS[topic])
    
-def SetRoot(root) :
-   global ROOT
-   ROOT = root
-
-def GetRoot() :
-   return(ROOT)
 
 #Add and access registered alarms  
 
@@ -256,6 +282,13 @@ def SetManager(manager) :
 def GetManager() :
    return(MANAGER)   
 
+def SetTable(table) :
+   global TABLE
+   TABLE = table
+
+def GetTable() :
+   return(TABLE)
+   
 #Determine if a widget exists
 def WidgetExists(widget) :
    return(widget.winfo_exists())

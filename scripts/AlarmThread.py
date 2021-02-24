@@ -10,12 +10,13 @@ class WorkerSignals(QObject) :
       
 #worker thread (generic)    
 class Worker(QRunnable) :
-   def __init__(self,fn,*args,**kwargs) :
+   def __init__(self,fn,delay = 0.5,*args,**kwargs) :
       super(Worker,self).__init__()
       
       #fn is the function in the GUI to call from the thread
       #In this case it is AlarmProcessor.GetAlarms()
       self.fn = fn
+      self.delay = delay
       
       #Possible arguments
       self.args = args
@@ -24,7 +25,10 @@ class Worker(QRunnable) :
       
       #Worker will emit a signal upon return from GUI call
       self.signals = WorkerSignals()
-      
+   
+   def SetDelay(self,delay) :
+      self.delay = delay   
+   
    #The thread continues to run as long as the application is 
    #up. When user wants to quit, self.running is set to False 
    def run(self) :      
@@ -37,9 +41,10 @@ class Worker(QRunnable) :
          else :
             #emit the result. The GUI will pick up the result to process
             self.signals.output.emit(result)
-            
+         
+         delay = self.delay  
          #Wait, and do it again
-         time.sleep(0.5)
+         time.sleep(delay)
    
    #Stop the thread   
    def stop(self) :

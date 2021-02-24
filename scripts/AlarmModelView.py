@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt
 
 from utils import *
 
+
 class TableView(QtWidgets.QTableView) :
    def __init__(self,*args,**kwargs) :
       super(TableView,self).__init__(*args,**kwargs)
@@ -17,13 +18,42 @@ class TableView(QtWidgets.QTableView) :
       self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
          QtWidgets.QSizePolicy.MinimumExpanding)
 
-
-
 class ShelfTable(TableView) :
    def __init__(self,*args,**kwargs) :
       super(ShelfTable,self).__init__(*args,**kwargs)
+   
+   #Context menu when user right-mouse clicks in a cell. 
+   #Multiple rows/columns/cells can be selected   
+   def contextMenuEvent(self,event) :
       
-           
+      menu = QtWidgets.QMenu(self)
+                
+      
+      unshelveaction = self.AddUnShelveAction(menu)
+      print(unshelveaction)
+     
+      action = menu.exec_(self.mapToGlobal(event.pos()))
+      if (action == unshelveaction) :
+         self.UnShelveAlarms() 
+   
+   def UnShelveAlarms(self) :
+      alarmlist = GetSelectedAlarms()
+      for alarm in alarmlist :
+         alarm.UnShelveRequest()
+
+   def AddUnShelveAction(self,menu) :
+      alarmlist = GetSelectedAlarms()
+      text = "Unshelve Selected"
+      if (len(alarmlist) == 1) :
+         text = "Unshelve: " + alarmlist[0].GetName()
+      unshelveaction = None
+      
+      if (len(alarmlist) > 0) :
+         unshelveaction = menu.addAction(text)
+      
+      return(unshelveaction)
+ 
+   
 #Extend the table view for our own AlarmTable
 class AlarmTable(TableView) :
    def __init__(self,*args,**kwargs) :
@@ -37,40 +67,52 @@ class AlarmTable(TableView) :
    def contextMenuEvent(self,event) :
       
       menu = QtWidgets.QMenu(self)
-      row = self.rowAt(event.pos().y())
-     
-      proxymodel = self.model()
-      sourcemodel = proxymodel.sourceModel()
+                
+      ackaction = self.AddAckAction(menu)
+      shelfaction = self.AddShelfAction(menu)
+      
+      action = menu.exec_(self.mapToGlobal(event.pos()))
+      if (action == ackaction) :
+         self.AckAlarms() 
+      elif (action == shelfaction) :
+         GetManager().toolbar.showShelfConfig() 
+   
+   def GetAlarmsToBeAcknowledged(self) :
+      alarmlist = GetSelectedAlarms()
       
       needsack = []
-      #The indices returned are that of the proxymodel, which is what 
-      #the table LOOKS like. We need the source model index to identify the
-      #actual selected alarm.
-      indexes = self.selectedIndexes()
-      for index in indexes :
-         proxy_index = index
-         #convert the proxy_index into a source_index, 
-         #and find the row that is associated with the selected alarm(s)
-         source_row = proxymodel.mapToSource(proxy_index).row()
-         alarm = sourcemodel.data[source_row]
+      for alarm in alarmlist :
          if (alarm.GetLatchSevr() != None and
             not "NO_ALARM" in alarm.GetLatchSevr()) :
-            
             needsack.append(alarm)
-                
+      return(needsack) 
+   
+   
+   def AddShelfAction(self,menu) :
+      alarmlist = GetSelectedAlarms()
+      
+      shelfaction = None
+      if (len(alarmlist) > 0) :
+         if (len(alarmlist) == 1) :
+            shelfaction = menu.addAction("Shelve: " + alarmlist[0].GetName())
+         else :
+            shelfaction = menu.addAction("Shelve Selected")
+      return(shelfaction)
+         
+   def AddAckAction(self,menu) :
       ackaction = None
+      needsack = self.GetAlarmsToBeAcknowledged()      
       if (len(needsack) > 0) :
          if (len(needsack) == 1) :
             ackaction = menu.addAction("Ack: " + needsack[0].GetName())
          else :
-            ackaction = menu.addAction("Ack All")
-    
-      action = menu.exec_(self.mapToGlobal(event.pos()))
-      if (action == ackaction) :
-         self.AckAlarms(needsack) 
-   
+            ackaction = menu.addAction("Ack Selected")
+      return(ackaction)
+      
+      
    #Acknowledge the list of alarms  
-   def AckAlarms(self,alarmlist) :
+   def AckAlarms(self) :
+      alarmlist = self.GetAlarmsToBeAcknowledged()
       for alarm in alarmlist :
          alarm.AcknowledgeAlarm()
          
@@ -81,24 +123,21 @@ class ModelView(QtCore.QAbstractTableModel) :
    
    
    #rowCount must be overloaded. 
-   #Overload it here, since the same for all children
-   
+   #Overload it here, since the same for all children 
    def rowCount(self,index) :
       return(len(self.data))
    
-   
    #Add alarm to the data. 
    def addAlarm(self,alarm) :
+    
       if (alarm in self.data) :
          self.data.remove(alarm)
       
       self.layoutAboutToBeChanged.emit()    
       #add the alarm to to the model data.
       self.data.append(alarm)
-     
       #Emit signal to the TableView to redraw
       self.layoutChanged.emit()
-      
       #Apply filters if applicable
       filters = GetManager().filterDialog
       if (filters != None) :
@@ -109,15 +148,16 @@ class ModelView(QtCore.QAbstractTableModel) :
       
       #Double check that the alarm is in the dataset.
       if (alarm in self.data) :        
+         
          self.layoutAboutToBeChanged.emit()
+         
          self.data.remove(alarm)   
          self.layoutChanged.emit()
-         
          #Apply filters.      
          filters = GetManager().filterDialog
          if (filters != None) :
             filters.applyFilters()
-   
+     
    #Configure the header if filtered      
    def setFilter(self,column,filtered=False) :
       try :
@@ -134,14 +174,15 @@ class ShelfModel(ModelView) :
       super(ShelfModel,self).__init__(data,parent,*args)
    
    
-      #rowCount must be overloaded
+   #rowCount must be overloaded
    def rowCount(self,index) :
       return(len(self.data))
    
    #columnCount must be overloaded
    def columnCount(self,index) :      
-      return(4)
+      return(7)
    
+
    #Display headers for the columns
    def headerData(self,section,orientation,role) :
       
@@ -160,22 +201,28 @@ class ShelfModel(ModelView) :
          return("")
       
       if (role == Qt.DisplayRole) :
-         
          if (section == 0) :
-            return("Name")
-         if (section == 1) :
-            return("Date Shelved")
-         if (section == 2) :
-            return("Exp Date")
-         if (section == 3) :
             return("Time Left")
-   #      if (section == 4) :
-    #        return("Category")
-     #    if (section == 5) :
-      #      return("Area")
+         
+         if (section == 1) :
+            return("Name")
+         if (section == 2) :
+            return("Date Shelved")
+         if (section == 3) :
+            return("Exp Date")
+         
+         if (section == 4) :
+            return("Category")
+         if (section == 5) :
+            return("Area")
+         if (section == 6) :
+            return("Reason")
+      
       return(QtCore.QAbstractTableModel.headerData(self,section,orientation,role))
    
    
+   
+   #def UpdateTimeLeft(self,alarm
    #Overloaded function that must be defined.      
    def data(self,index,role) :
       #The index (contains both x,y) and role are passed.  
@@ -191,23 +238,59 @@ class ShelfModel(ModelView) :
       #on the column. Column "0" is handled by the StatusDelegate
       if role == Qt.DisplayRole :
          alarm = self.data[row] 
-        
+         
          if (col == 0) :
+            timedisplay = self.DisplayTimeLeft(alarm)
+            return(timedisplay)
+
+         if (col == 1) :
             return(alarm.GetName())
-        # if (col == 1) :
-         #   return(sevr)
-         #if (col == 2) :
-          #  return(alarm.GetName())
-         #if (col == 3) :              
-          #  timestamp = alarm.GetTimeStamp()
-            
-           # if (timestamp == None) :
-            #   timestamp = alarm.GetAckTime()
-            #return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-         #if (col == 4) :
-          #  return(alarm.GetCategory())
-        # if (col == 5) :
-         #   return(alarm.GetLocation())  
+         if (col == 2) :
+            timestamp = alarm.GetShelfTime()
+            return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+         if (col == 3) :
+            timestamp = alarm.GetShelfExpiration()
+            if (timestamp != None) :
+               return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+         if (col == 4) :
+            return(alarm.GetCategory())
+         if (col == 5) :
+            return(alarm.GetLocation())  
+         if (col == 6) :
+            return(alarm.GetShelfReason())
+
+      
+   def DisplayTimeLeft(self,alarm) :
+      
+      timeleft = alarm.timeleft
+      if (timeleft ==  None) :
+         return("")
+                  
+      seconds = timeleft.seconds
+      days = timeleft.days
+      
+      displaytime = str(seconds) + " s"
+      displaytime = ""
+      if (days > 0) :
+         displaytime = str(days) + " days "
+      
+      if (seconds < 60) :
+         displaytime = displaytime + str(seconds) + " sec"
+          
+      elif (seconds > 60 and seconds < 3600) :
+         minutes = '{:0.2f}'.format(seconds / 60)
+         displaytime = displaytime + minutes + " min"
+      
+      elif (seconds > 3600 and seconds < 86400) :
+         if (days > 0) :
+            hours = str(int(seconds/3600))
+            GetManager().GetTable().horizontalHeader().setSectionResizeMode(3,
+               QtWidgets.QHeaderView.ResizeToContents)
+         else :
+            hours = '{:0.2f}'.format(seconds / 3600)
+         displaytime = displaytime + hours + " hours"
+      
+      return(displaytime)
 
        
 #AlarmModel contains the data to disaply in the TableView widget    
@@ -222,7 +305,7 @@ class AlarmModel(ModelView) :
       #The roles give instructions about how to display the model.
       row = index.row()
       col = index.column()
-            
+       
       #Center column 2, the timestamp
       if (role == Qt.TextAlignmentRole) : # and (col == 2 or col == 3)) :
          return(Qt.AlignCenter)
@@ -231,6 +314,7 @@ class AlarmModel(ModelView) :
       #on the column. Column "0" is handled by the StatusDelegate
       if role == Qt.DisplayRole :
          alarm = self.data[row] 
+         #print("                            UPDATE MODEL")
          #How we display the sevr and latchsevr depend on eachother.
          (sevr,latch) = self.GetSevrDisplay(alarm)        
          
@@ -241,11 +325,13 @@ class AlarmModel(ModelView) :
          if (col == 2) :
             return(alarm.GetName())
          if (col == 3) :              
+            
             timestamp = alarm.GetTimeStamp()
             
             if (timestamp == None) :
                timestamp = alarm.GetAckTime()
-            return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+            if (timestamp != None) :
+               return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
          if (col == 4) :
             return(alarm.GetCategory())
          if (col == 5) :
@@ -371,3 +457,33 @@ class ProxyModel(QtCore.QSortFilterProxyModel) :
    
    def statusChanged(self,statuslist) :
       print("STATUS CHANGED",statuslist)
+      
+def GetSelectedAlarms() :
+   alarmlist = []
+   proxymodel = GetTable().model()      
+   sourcemodel = proxymodel.sourceModel()
+         
+   #The indices returned are that of the proxymodel, which is what 
+   #the table LOOKS like. We need the source model index to identify the
+   #actual selected alarm.
+   indices = GetTable().selectedIndexes()
+   for index in indices :
+      proxy_index = index
+      #convert the proxy_index into a source_index, 
+      #and find the row that is associated with the selected alarm(s)
+      source_row = proxymodel.mapToSource(proxy_index).row()
+      alarm = sourcemodel.data[source_row]         
+      alarmlist.append(alarm)
+   return(alarmlist)
+
+def CountSelectedAlarms() :
+      proxymodel = GetTable().model()
+      
+      sourcemodel = proxymodel.sourceModel()
+      
+ 
+      #The indices returned are that of the proxymodel, which is what 
+      #the table LOOKS like. We need the source model index to identify the
+      #actual selected alarm.
+      indices = GetTable().selectedIndexes()
+      return(len(indices))

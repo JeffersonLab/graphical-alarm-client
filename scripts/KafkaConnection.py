@@ -3,17 +3,30 @@ import pwd
 import types
 import pytz
 import time
+import json
+
+from utils import *
 from datetime import datetime
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 from confluent_kafka import avro, Producer, Consumer
 from confluent_kafka.avro.cached_schema_registry_client import CachedSchemaRegistryClient
-
+from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.avro.serializer.message_serializer import MessageSerializer as AvroSerde
 
 from confluent_kafka.avro.serializer import SerializerError
 from confluent_kafka import OFFSET_BEGINNING
 from avro.schema import Field
+
+
+def ConvertTimeStamp(seconds) :
+      #Work in utc time, then convert to local time zone.
+    
+      ts = datetime.fromtimestamp(seconds//1000)
+      utc_ts = pytz.utc.localize(ts)
+      #Finally convert to EST.
+      est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
+      return(est_ts)
 
 class KafkaConnection(object) :
    def __init__(self) :
@@ -30,9 +43,11 @@ class KafkaConnection(object) :
       
       conf = {'url': os.environ.get('SCHEMA_REGISTRY', 'http://localhost:8081')}
       schema_registry = CachedSchemaRegistryClient(conf)
+      
+      
       self.avro_serde = AvroSerde(schema_registry)
       self.params = types.SimpleNamespace()
-      
+    
       #Access the latest schema
       for topic in self.topics :
          #THIS IS JUST UNTIL SHELVING IS IMPLEMENTED
@@ -57,9 +72,11 @@ class KafkaConnection(object) :
             if ("active" in topic) :
                self.schemamap[topic]['key'] = \
                schema_registry.get_latest_schema(keyschema)[1]
+         
          except :
             print(topic,"FAILED!***")
-            pass
+            pass     
+      
       
       latest_schema = self.schemamap['registered-alarms']['value']
       
@@ -70,6 +87,8 @@ class KafkaConnection(object) :
       self.categories = categories
       self.locations = locations
    
+
+      
    #Accessors
    def GetCategories(self) :
       return(self.categories)
@@ -108,6 +127,19 @@ class KafkaProducer(KafkaConnection) :
     else:
         print('Message delivered')
    
+   def UnShelveRequest(self,name) :
+      params = self.params
+      params.key =  name
+      params.value = None
+   
+      self.SendShelfMessage()
+      
+   def ShelveMessage(self,name,reason,expiration) :
+      params = self.params
+      params.key = name
+      params.value = {"expiration":expiration,"reason":reason}
+      self.SendShelfMessage()
+   
    #Create an acknowledge message
    def AckMessage(self,name,ack) :
       if (not "ACK" in ack) :
@@ -117,10 +149,23 @@ class KafkaProducer(KafkaConnection) :
       params.key = {"name": name, "type": "EPICSAck"}
       params.value = {"msg": {"ack": ack}}
       
-      self.SendMessage()
+      self.SendAckMessage()
    
+   def SendShelfMessage(self) :
+      params = self.params
+      topic = self.topic
+      value_schema = self.schemamap[topic]['value']
+      
+      val_payload = None
+      if (params.value != None) :
+         val_payload = self.serialize_avro(topic,value_schema,params.value,
+            is_key=False)
+      self.producer.produce(topic=topic,value=val_payload,key=params.key,
+         headers = self.hdrs)
+      self.producer.flush()
+      
    #Send a message
-   def SendMessage(self) :
+   def SendAckMessage(self) :
       params = self.params
       topic = self.topic
       
@@ -225,14 +270,41 @@ class KafkaConsumer(KafkaConnection) :
       
       value = self.avro_serde.decode_message(msg.value())
       timestamp = self.DecodeTimeStamp(msg)
-     
+      
       return(alarmname,value,msgtype)
    
+   def DecodeMsgValue(self,msg) :
+      value = self.avro_serde.decode_message(msg.value())
+      return(value)
+      
+   def DecodeMsgType(self,msg) :
+      topic = msg.topic()
+      
+      if (topic == "active-alarms") :
+         key = self.avro_serde.decode_message(msg.key())  
+         msgtype = key['type']
+      else :
+         msgtype = topic 
+      return(msgtype)
+      
+      
+   def DecodeAlarmName(self,msg) :
+      topic = msg.topic()
+      if (topic == "active-alarms") :
+         key = self.avro_serde.decode_message(msg.key())  
+         alarmname = key['name']
+      else :  
+         key = msg.key().decode('utf-8') 
+         alarmname = key
+      return(alarmname)
+      
+
    #Convert the timestamp into something readable
    def DecodeTimeStamp(self,msg) :
       #timestamp from Kafka is in UTC
       timestamp = msg.timestamp()
       
+      return(ConvertTimeStamp(timestamp[1]))
       #Work in utc time, then convert to local time zone.
       ts = datetime.fromtimestamp(timestamp[1]//1000)
       utc_ts = pytz.utc.localize(ts)

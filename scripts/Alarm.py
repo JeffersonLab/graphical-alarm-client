@@ -1,36 +1,13 @@
 import time
-
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import QTimer, QModelIndex
 from utils import *
-from KafkaConnection import *
+from KafkaConnection import ConvertTimeStamp
 from AlarmProperties import *
+from AlarmThread import *
+from utils import *
 
-#Figure out what type of alarm we're dealing with.
-def ExtractAlarmType(definition) :
-   type = "StreamRuleAlarm"
-     
-   producer = definition['producer']  
-   if ('pv' in producer) :
-      type = "DirectCAAlarm"   
-   return(type)
 
-#WORKS FOR ALARM MANAGER
-#Create an alarm of the correct type
-def MakeAlarm(alarmname,type=None,params=None) :
-   alarm = None
-   
-   if (type == None) :
-      type = ExtractAlarmType(params)
- 
-   if (type == "DirectCAAlarm") :
-      alarm = EpicsAlarm(alarmname,params)
-   elif (type == "StreamRuleAlarm") :
-      alarm = StreamRuleAlarm(alarmname,params)
-   elif (type == None) :
-      alarm = Alarm(alarmname,params) 
-      
-   return(alarm)
-
-      
 #Encapsulate an alarm object
 class Alarm(object) :
    
@@ -41,9 +18,6 @@ class Alarm(object) :
       self.definition = params
       
       self.propwidget = None
-      self.ack = False      
-      self.latched = True
-      self.latchsevr = None
       self.isshelved = False
       
       #Timestamps displayed on GUI. 
@@ -53,17 +27,21 @@ class Alarm(object) :
       self.timestamp = None
       self.acktime = None
       self.cleartime = None
+      
+      self.shelftime = None
+      self.shelfexpire = None
+      self.shelfreason = None
+      self.timeleft = None
+      self.shelftimer = None
+      self.delay = 1.0
+      
+      self.worker = None
+      self.counting = False
    
-      self.debug = False
-   
-  
    #If alarm already exists, replace previous definition.
    def Configure(self,params) :
       self.definition = params      
       
-      #Have to reset the latchsevr because the "latching" property
-      #may have been changes.
-      self.SetLatchSevr()
      
    #accessors
    def GetName(self) :
@@ -72,14 +50,7 @@ class Alarm(object) :
    #extract the time stamp from the last active alarm
    def GetTimeStamp(self) :      
       return(self.timestamp)
-   
-   #What time was the alarm acknowledged?
-   def GetAckTime(self) :
-      return(self.acktime)
-   
-   def GetClearTime(self) :
-      return(self.cleartime)
-      
+         
    #Get the alarm's trigger for display
    def GetTrigger(self) :
       pv = None
@@ -97,7 +68,14 @@ class Alarm(object) :
       if (self.GetParam('latching') != None) :
          latching = self.GetParam('latching')
       return(latching)
-      
+   
+   #determine the alarming sevr/stat/latch    
+   def SetAlarming(self,ts,status) :
+     
+      self.SetSevr(ts,status)      
+      self.SetStat(status)
+      self.SetLatchSevr()    
+   
    #Get the location of the alarm 
    def GetLocation(self) :
       return(self.GetParam("location"))
@@ -117,72 +95,113 @@ class Alarm(object) :
       return(value)
    
       
-   #Activate an alarm. Add or Remove from AlarmModel
-   #####WORKS FOR ALARM MANAGER
-   def Activate(self) :            
-      #Alarms that latch are a little more complicated when
-      #determining whether not they are removed or displayed     
-      sevr = self.GetSevr()
-      self.SetLatchSevr()
-      latched = self.GetLatchSevr()
-         
-      #The alarm has been acknowledged (if necessary) and cleared
-      if ((latched == None or latched == "NO_ALARM")  and 
-         (sevr == None or sevr == "NO_ALARM") or self.IsShelved()) :
-         self.Remove()
-      
-      #The alarm is in, and does not need to be acknowledged
-      elif (sevr != None and latched == None) :        
-         self.Display()
-      
-      #alarm is latched
-      elif (latched != None) :                
-         self.Display()
    
    #########        SHELVING   #################
    def IsShelved(self) :
       return(self.isshelved)
    
    def Shelve(self) :
-     
+
       self.isshelved = True
+      self.Display()
+      
       
    def UnShelve(self) :
+ 
       self.isshelved = False
-      
+      self.Remove()
+      self.counting = False
+   
+   def GetShelfTime(self) :
+      return(self.shelftime)
+   
+   def Now(self) :
+      return(ConvertTimeStamp(int(time.time()) * 1000))
+   
+
    def SetShelvingStatus(self,ts,shelfstatus) :
       if (shelfstatus == None) :
          self.shelfstatus = None
          return
-         
-      duration = shelfstatus
+      
+      self.shelftime = ts
+      self.timeleft = None
+      
       reason = None
       expiration = None
       if (shelfstatus != None) :
-         if ('expiration' in shelfstatus['duration']) :
-            expiration = shelfstatus['duration']['expiration']
-         if ('reason' in shelfstatus['duration']) :
-            reason = shelfstatus['duration']['reason']
+         if ('expiration' in shelfstatus) :
+            expiration = shelfstatus['expiration']
+            if (expiration == None) :
+               self.shelfexpire = None
+            else :  
+               self.shelfexpire = ConvertTimeStamp(expiration)
+               print(expiration,"EXPERATION!!",self.shelfexpire)
+         if ('reason' in shelfstatus) :
+            reason = shelfstatus['reason']
+            self.shelfreason = reason      
+      if (self.shelfexpire != None) :
+         self.timeleft = self.shelfexpire - self.Now()
             
-      self.shelfstatus = (ts,expiration,reason)
    
-   def GetShelfExpiration(self) :
+   def GetShelfExpiration(self) :            
+      return(self.shelfexpire)
       
-      (ts,exp,reason) = self.shelfstatus
-      return(exp)
-   
-   def GetShelfTimeStamp(self) :
-      (ts,exp,reason) = self.shelfstatus
-      return(ts)
-   
    def GetShelfReason(self) :
-      (ts,exp,reason) = self.shelfstatus
-      return(reason)
-      
+      return(self.shelfreason)
    
-              
+   def CalcTimeLeft(self) :
+      
+      if (self.Now() <= self.shelfexpire) :
+         self.timeleft = self.shelfexpire - self.Now()      
+      else :
+         self.timeleft = None
+      
+      #self.SetDelay()
+      return(self)
+      
+   def StartCountDown(self) :
+      if (self.counting or self.GetShelfExpiration() == None) :
+         return    
+      worker = None
+      self.counting = True
+      GetManager().StartCountDown(self)
+   
+   def ConvertDurationString(self,string) :
+   
+      splitstring = string.split()
+      magnitude = int(splitstring[0])
+      units = splitstring[1]
+      
+      if ("min" in units) :
+         magnitude = magnitude * 60
+      elif ("hour" in units) :
+         magnitude = magnitude * 3600
+      
+      #topic takes milliseconds
+      seconds = time.time() + magnitude
+      expiration = int(seconds * 1000)
+      
+      return(expiration)
+      
+   def ShelveRequest(self,reason,duration) :
+      expiration = duration
+      if (duration != None) :
+         expiration = self.ConvertDurationString(duration)
+         
+      producer = GetProducer('shelved-alarms')
+      print(self.GetName(),reason,expiration)
+      
+      producer.ShelveMessage(self.GetName(),reason,expiration)
+   
+   def UnShelveRequest(self) :
+      producer = GetProducer('shelved-alarms')
+      producer.UnShelveRequest(self.GetName()) 
+   
+   
    #Remove an inactive alarm from the alarm model
    def Remove(self) :
+   
       GetModel().removeAlarm(self)
    
    #Add an active alarm to the alarm model
@@ -210,7 +229,21 @@ class EpicsAlarm(Alarm) :
       
       self.stat = None
       self.sevr = None
+      self.ack = False
+      self.latched = True
+      self.latchsevr = None
       
+      self.acktime = None
+      self.cleartime = None
+   
+   #If alarm already exists, replace previous definition.
+   def Configure(self,params) :
+      super().Configure(params)
+      
+      #Have to reset the latchsevr because the "latching" property
+      #may have been changed.
+      self.SetLatchSevr()
+     
    #determine the alarming sevr/stat/latch    
    def SetAlarming(self,ts,status) :
       self.SetSevr(ts,status)      
@@ -219,6 +252,7 @@ class EpicsAlarm(Alarm) :
    
    #An EPICS alarm's sevr: MAJOR/MINOR/NO_ALARM
    def SetSevr(self,ts,status) :
+      
       sevr = self.ExtractSevr(status)
       
       #If a severity is assigned, 
@@ -227,6 +261,7 @@ class EpicsAlarm(Alarm) :
          self.cleartime = ts        
       else :
          self.timestamp = ts
+         
          self.ack = False
          self.acktime = None
          self.cleartime = ""
@@ -284,6 +319,34 @@ class EpicsAlarm(Alarm) :
       return(None)
    def ExtractStat(self,status) :
       return(status['msg']['stat'])
+   #What time was the alarm acknowledged?
+   def GetAckTime(self) :
+      return(self.acktime)
+   
+   def GetClearTime(self) :
+      return(self.cleartime)
+   
+   #Activate an alarm. Add or Remove from AlarmModel
+   #####WORKS FOR ALARM MANAGER
+   def Activate(self) :            
+      #Alarms that latch are a little more complicated when
+      #determining whether not they are removed or displayed     
+      sevr = self.GetSevr()
+      self.SetLatchSevr()
+      latched = self.GetLatchSevr()
+      
+      #The alarm has been acknowledged (if necessary) and cleared
+      if ((latched == None or latched == "NO_ALARM")  and 
+         (sevr == None or sevr == "NO_ALARM") or self.IsShelved()) :
+         self.Remove()
+      
+      #The alarm is in, and does not need to be acknowledged
+      elif (sevr != None and latched == None) :        
+         self.Display()
+      
+      #alarm is latched
+      elif (latched != None) :                
+         self.Display()
 
  ##############################################################  
    
@@ -321,3 +384,5 @@ class StreamRuleAlarm(Alarm) :
 
 
 
+ 
+      
