@@ -4,12 +4,13 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QObject,QThreadPool
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog,QMenu
 
-#from ShelfManager import *
+#from AlarmManager import *
 
 from AlarmProcessor import *
 from AlarmThread import *
 from AlarmModelView import *
 from AlarmFilters import *
+from AlarmShelving import *
 from utils import *
 
 class MyProxyModel(QtCore.QSortFilterProxyModel) :
@@ -18,59 +19,83 @@ class MyProxyModel(QtCore.QSortFilterProxyModel) :
       self.setDynamicSortFilter(True)
 
 
-class AlarmToolBar(QtWidgets.QToolBar) :
+class ToolBar(QtWidgets.QToolBar) :
    def __init__(self,parent,*args,**kwargs) :
-      super(AlarmToolBar,self).__init__(*args,**kwargs)
+      super(ToolBar,self).__init__(*args,**kwargs)
       
       self.parent = parent
       self.parent.filterDialog = None
             
       filteraction = FilterAction(self)
       self.addAction(filteraction)
-      
-  #    shelveaction = ShelveAction(self)
-   #   self.addAction(shelveaction)
    
+   def showShelfConfig(self,state=None) :
+     
+      dialog = self.parent.shelfDialog
+      if (dialog == None) :
+         dialog = self.parent.ShelfDialog()
+      
+      dialog.show()
+      dialog.activateWindow()
+      dialog.raise_()
+      
+      dialog.Reset()
+      
+      self.parent.shelfDialog = dialog
+      
    def showFilter(self,state) :
       dialog = self.parent.filterDialog
+      
       if (dialog == None) :
-         self.parent.filterDialog = FilterDialog(self)
-      elif (dialog != None) :
-         dialog.show()
+        
+         dialog = self.parent.FilterDialog()
+      
+      dialog.show()
+      dialog.activateWindow()
+      dialog.raise_();
+      
+      self.parent.filterDialog = dialog
 
 #Only one widget for a main window
-class MainWindow(QtWidgets.QMainWindow) :
-   def __init__(self,*args,**kwargs) :
-      super(MainWindow,self).__init__(*args,**kwargs)
+class JAWSManager(QtWidgets.QMainWindow) :
+   def __init__(self,title,type,*args,**kwargs) :
+      super(JAWSManager,self).__init__(*args,**kwargs)
       
       self.data = [] 
-      
-      self.setWindowTitle("JAWS")
-      self.filterDialog = None
-      self.toolbar = AlarmToolBar(self)
+      self.type = type
+      self.setWindowTitle(title)
+      self.filterDialog = None   
+      self.shelfDialog = None  
+      self.toolbar = self.ToolBar()  
       self.addToolBar(self.toolbar)
+      
+      
+      
       ###
-      proxymodel = AlarmProxyModel()      
+      proxymodel = self.ProxyModel()      
       self.proxymodel = proxymodel
       
       #Create the TableView widget that will display the alarm model
-      self.alarmtable = AlarmTable()
-      self.alarmtable.sortByColumn(3,1)   
+      self.tableview = self.TableView()
       
       #Create the alarmmodel that will be displayed in the table
-      self.alarmmodel = AlarmModel(self.data)
+      self.modelview = self.ModelView()
       
       #Assign the model to the table
-      self.alarmtable.setModel(proxymodel)
-      self.alarmtable.setSortingEnabled(True)
+      self.tableview.setModel(proxymodel)
+      self.tableview.setSortingEnabled(True)
       
-      self.proxymodel.setSourceModel(self.alarmmodel)
+      self.proxymodel.setSourceModel(self.modelview)
       self.proxymodel.setFilterKeyColumn(3)
       
       #Put the table in the main widget's layout.
       #Need to have a layout for its size hint.
       layout = QtWidgets.QGridLayout()
-      layout.addWidget(self.alarmtable)
+      
+      menubar = self.MenuBar()
+      layout.addWidget(menubar)
+      
+      layout.addWidget(self.tableview)
       self.layout = layout
       
       #Total misnomer. This command grows and shrinks the main window
@@ -90,26 +115,28 @@ class MainWindow(QtWidgets.QMainWindow) :
 
       #Make the main window and the model available      
       SetManager(self)
-      SetModel(self.alarmmodel)
-      
-      self.alarmtable.setColumnWidth(2,200)
-      self.alarmtable.setColumnWidth(3,150)
-
+      SetModel(self.modelview)
+      SetTable(self.tableview)
+ 
       #Show the results
       self.setCentralWidget(widget)
       self.show()
       
-      #Set up the threading
-      self.processor = AlarmProcessor()
-      self.threadpool = QThreadPool()
       
+      #Set up the threading
+      self.StartProcessor()      
+      self.threadpool = QThreadPool()      
       self.startWorker()
    
-      
+
+   def GetTable(self) :
+      return(self.tableview)
+        
    #Create and start the worker.
    def startWorker(self) :
+    
       #The function that the worker will call
-      self.worker = Worker(self.processor.GetAlarms) 
+      self.worker = Worker(self.processor.GetAlarms,0.5) 
       
       #Connect to the worker's emit signal, and call the GUI to 
       #process the alarms
@@ -120,7 +147,9 @@ class MainWindow(QtWidgets.QMainWindow) :
    #This must be done from the MainWindow thread because the GUI
    #will be updated.
    def ProcessAlarms(self,msg) :
+     
      if (msg != None and not msg.error()) :        
+        
          self.processor.ProcessAlarms(msg)
    
    #Stop the worker from running. 
@@ -128,18 +157,19 @@ class MainWindow(QtWidgets.QMainWindow) :
       self.worker.stop()
    
    #Close the GUI gracefully
-   def closeEvent(self,event) :
+   def closeEvent(self, event=QtGui.QCloseEvent()) :
+      
       self.stopWorker()
       sys.exit(0)
    
    #Access the AlarmTable
    def getTable(self) :
-      return(self.alarmtable) 
+      return(self.tableview) 
     
 
       
-app = QtWidgets.QApplication(sys.argv)
-
-window = MainWindow()
+#app = QtWidgets.QApplication(sys.argv)
+#window = AlarmManager()
+#window = JAWSManager("HELLO","MAN")
 #window.show()
-app.exec()
+#app.exec()
