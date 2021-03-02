@@ -2,23 +2,31 @@ import datetime
 import tempfile  
 import tkinter as tk
 from tkinter import *
-
+import re 
+#import psutil
+import pytz
+import time
 from PyQt5.QtGui import QIcon, QPixmap, QImage
+
+from KafkaConnection import *
+
 DEPLOY = "ops"
 
 TEST = False
-MAIN = None
-ROOT = None
-PRODUCER = None
+MANAGER = None
 
+CONSUMER = None
+PROCESSOR = None
 
 ACTIVEPANE = None
 SHELVEDPANE = None
 MODEL = None
+TABLE = None
 
 REGISTEREDALARMS = {}
 ACTIVEALARMS = {}
 SHELVEDALARMS = {}
+PRODUCERS = {}
 
 BIGBOLD = "-*-helvetica-medium-r-bold-*-16-*-*-*-*-*-*-*"
 SMALLBOLD =  "-*-helvetica-medium-r-bold-*-12-*-*-*-*-*-*-*"
@@ -36,13 +44,30 @@ ALARMSTATUS = {
    "ACK"       : {
       "rank" : 2 ,"color" : 'white' , "image" : None} ,
    "NO_ALARM"  : {
-      "rank" : 0, "color" : 'green' , "shelved" : None},
+      "rank" : 0, "color" : 'green' , "image" : None, "shelved" : None},
 }
 
-
+SOURCEDIR = "./"
    
 ####
+def checkIfProcessRunning(name) :
+   return False
+   for proc in psutil.process_iter() :
+      try :
+         print(name.lower(), proc.name().lower())
+         if (name.lower() in proc.name().lower()) : return True
+         
+      except :
+         pass
+      return False
 
+def SetProcessor(processor) :
+   global PROCESSOR
+   PROCESSOR = processor
+   
+def GetProcessor() :
+   return(PROCESSOR)
+   
 def GetAlarmType(msgtype) :
    
    type = "StreamRuleAlarm"
@@ -51,9 +76,21 @@ def GetAlarmType(msgtype) :
    
    return(type)
    
+def ConvertTimeStamp(seconds) :
+   #Work in utc time, then convert to local time zone.
+   ts = datetime.fromtimestamp(seconds//1000)
+   utc_ts = pytz.utc.localize(ts)
+      
+   #Finally convert to EST.
+   est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
+   return(est_ts)
 
-def GetRank(status) :
+def GetRank(status) :   
+   status = TranslateACK(status)   
+   if (status == None) :
+      return(None)
    return(ALARMSTATUS[status]['rank'])
+
 
 def WidgetExists(widget) :
    return(widget.winfo_exists())
@@ -70,8 +107,12 @@ def GetShelvedImage(status) :
    return(image)
 
 def GetStatusImage(status) :
+   
+   status = TranslateACK(status)
+  
    image = None
    color = GetStatusColor(status)
+  
    if (color != None) :
       if (ALARMSTATUS[status]['image'] == None) :
          filename = IMAGEPATH + color + "-ball.png"
@@ -82,18 +123,6 @@ def GetStatusImage(status) :
       image = ALARMSTATUS[status]['image']
    return(image)
 
-def OldGetStatusImage(status) :
-   image = None
-   color = GetStatusColor(status)
-   if (color != None) :
-      if (ALARMSTATUS[status]['image'] == None) :
-         filename = IMAGEPATH + color + "-ball.png"
-         image = tk.PhotoImage(file=filename)
-         ALARMSTATUS[status]['image'] = image
-            
-      image = ALARMSTATUS[status]['image']
-   return(image)
-         
       
 def SetModel(model) :
    global MODEL
@@ -101,26 +130,44 @@ def SetModel(model) :
 
 def GetModel() :
    return(MODEL)
-         
+
+def TranslateACK(status) :
+   
+   ack = status
+   if (status != None) :
+      match = re.search("(.*)_ACK",status)
+      if (match != None) :
+         ack = match.group(1)
+         if (ack == "NO") :
+            ack = status
+   return(ack)
+   
 def GetStatusColor(status) :
+   status = TranslateACK(status)
+      
    color = None
    if (status in ALARMSTATUS.keys()) :
       color = ALARMSTATUS[status]['color']
    return(color)
 
-def SetProducer(producer) :
-   global PRODUCER
-   PRODUCER = producer
+def SetConsumer(consumer) :
+   global CONSUMER
+   CONSUMER = consumer
 
-def GetProducer() :
-   return(PRODUCER)
+def GetConsumer() :
+   return(CONSUMER)
    
-def SetRoot(root) :
-   global ROOT
-   ROOT = root
+def SetProducer(producer,topic) :
+   global PRODUCERS
+   PRODUCERS[topic] = producer
 
-def GetRoot() :
-   return(ROOT)
+def GetProducer(topic) :
+   
+   if (not topic in PRODUCERS) :
+      producer = KafkaProducer(topic)
+      SetProducer(producer,topic)
+   return(PRODUCERS[topic])
+   
 
 #Add and access registered alarms  
 
@@ -227,14 +274,21 @@ def SetTest(test) :
 def GetTest() :
    return(TEST)
 
-def SetMain(main) :
-   global MAIN
-   MAIN = main
+def SetManager(manager) :
+   global MANAGER
+   MANAGER = manager
 
 #Access to the main gui
-def GetMain() :
-   return(MAIN)   
+def GetManager() :
+   return(MANAGER)   
 
+def SetTable(table) :
+   global TABLE
+   TABLE = table
+
+def GetTable() :
+   return(TABLE)
+   
 #Determine if a widget exists
 def WidgetExists(widget) :
    return(widget.winfo_exists())
