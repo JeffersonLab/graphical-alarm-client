@@ -1,8 +1,11 @@
 # graphical-alarm-client
-A graphical desktop user interface client application for the [kafka-alarm-system](https://github.com/JeffersonLab/kafka-alarm-system).  Written in Python with TK and allows users to:
+A graphical desktop user interface client application for the [kafka-alarm-system](https://github.com/JeffersonLab/kafka-alarm-system).  Written in Python with QT and allows users to:
 - List active alarms
-- List alarm definitions (including inactive alarms)
+- List registered alarms
+- List shelved alarms
 - Shelve alarms
+- Acknowledge alarms
+- Suppress alarms
 ## Docker
 ```
 docker-compose up
