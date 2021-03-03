@@ -6,6 +6,9 @@ An operator desktop human machine interface (HMI) client application for the [ka
 - Shelve alarms
 - Acknowledge alarms
 - Suppress alarms
+
+![Screenshot](https://github.com/JeffersonLab/graphical-alarm-client/raw/master/screenshot.jpg?raw=true "Screenshot")
+
 ## Docker
 ```
 docker-compose up
