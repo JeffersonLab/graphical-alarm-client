@@ -1,5 +1,5 @@
 # graphical-alarm-client
-A graphical desktop user interface client application for the [kafka-alarm-system](https://github.com/JeffersonLab/kafka-alarm-system).  Written in Python with QT and allows users to:
+An operator desktop human machine interface (HMI) client application for the [kafka-alarm-system](https://github.com/JeffersonLab/kafka-alarm-system).  Written in Python with QT and allows operators to:
 - List active alarms
 - List registered alarms
 - List shelved alarms
