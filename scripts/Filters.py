@@ -6,7 +6,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QObject,QThreadPool
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
 
-from AlarmModelView import *
+from ModelView import *
 #from MenuActions import *
 from utils import *
 
@@ -17,6 +17,7 @@ class FilterList(QtWidgets.QWidget) :
       super(FilterList,self).__init__(parent)
       
       self.parent = parent
+      
       #Create a VBoxLayout
       layout = QtWidgets.QVBoxLayout()
       
@@ -117,8 +118,7 @@ class FilterList(QtWidgets.QWidget) :
             elif (checked and val == filter) :
                selected.append(alarm) 
       self.addheader = addheader
-      
-      
+            
       return(selected)
 
 
@@ -160,33 +160,81 @@ class StatusFilter(FilterList) :
    def GetFilterVal(self,alarm) :
       return(alarm.GetSevr())
 
-        
+class TypeFilter(FilterList) :
+   def __init__(self,parent=None) :
+   
+   
+      self.options = ['epics']
+      super(TypeFilter,self).__init__('Type',parent)
+      self.column = 6
+      
+class DateTimeFilter(QtWidgets.QWidget) :
+   def __init__(self,label,parent=None,*args,**kwargs) :
+      super(DateTimeFilter,self).__init__(parent,*args,**kwargs)
+      
+      layout = QtWidgets.QHBoxLayout()
+      self.setLayout(layout)
+      
+      label = QtWidgets.QLabel(label)
+      font = QtGui.QFont()
+      font.setBold(True)
+      label.setFont(font)
+      layout.addWidget(label,0,Qt.AlignLeft)
+      
+      edit = QtWidgets.QDateTimeEdit(calendarPopup=True)
+      edit.setDateTime(QtCore.QDateTime.currentDateTime())
+      edit.setDisplayFormat("MMM-dd-yyyy hh:mm:ss")
+      edit.dateChanged.connect(parent.DateChanged)
+      layout.addWidget(edit,0,Qt.AlignLeft)
+      
+   def applyFilters(self) :
+      print("APPLY FILTER:",self)
+            
+
+             
 class FilterDialog(QtWidgets.QDialog) :
    def __init__(self,title,parent=None,*args,**kwargs) :
       super(FilterDialog,self).__init__(parent,*args,**kwargs)
+      
       
       self.filters = []
       self.setModal(0)
       self.setSizeGripEnabled(True)
       self.AddFilters()
       
+      ###COLUMN FILTERS
       col = 0
       layout = QtWidgets.QGridLayout()     
       for filter in self.filters :
-         layout.addWidget(filter,1,col)
+         layout.addWidget(filter,1,col,Qt.AlignCenter)
          col = col + 1
-      
       
       groupbox = QtWidgets.QGroupBox(title)
       groupbox.setLayout(layout) 
       
+
       vlayout = QtWidgets.QVBoxLayout()
       vlayout.addWidget(groupbox)
+      
       self.setLayout(vlayout) 
       self.setWindowTitle("Filter")
       self.show()
    
+   def AddTimeRange(self) :
+      widget = QtWidgets.QWidget()
+      layout = QtWidgets.QHBoxLayout()
+      widget.setLayout(layout)
+      
+      layout.addWidget(DateTimeFilter("from",self),0,Qt.AlignLeft)
+      
+      return(widget)
+   
+   def DateChanged(self) :
+      print("FROM:",type(self.fromedit.dateTime()))
+      #"TO:",self.toedit.dateTime())
+   
    def applyFilters(self) :
+     
       alarmlist = GetModel().data[:]
       filtered = []
       
@@ -218,10 +266,12 @@ class AlarmFilterDialog(FilterDialog) :
       statusfilter = StatusFilter(self)
       locationfilter = LocationFilter(self)
       categoryfilter = CategoryFilter(self)
+      typefilter = TypeFilter(self)
       
       self.filters.append(statusfilter)     
       self.filters.append(categoryfilter)
       self.filters.append(locationfilter)
+      self.filters.append(typefilter)
    
    def NewModel(self,data) :
 
@@ -233,8 +283,11 @@ class ShelfFilterDialog(FilterDialog) :
          parent,*args,**kwargs) 
    
    def AddFilters(self) :
+      typefilter = TypeFilter(self)
       categoryfilter = CategoryFilter(self)
       locationfilter = LocationFilter(self)
+      
+      self.filters.append(typefilter)
       self.filters.append(categoryfilter)
       self.filters.append(locationfilter)
       
@@ -242,32 +295,5 @@ class ShelfFilterDialog(FilterDialog) :
    def NewModel(self,data) :
       return(ShelfModel(data))
 
-class ShelfAction(QtWidgets.QAction) :
-   def __init__(self,parent,*args,**kwargs) :
-      super(ShelfAction,self).__init__(parent,*args,**kwargs)
-      
-      self.parent = parent
-      icon = QtGui.QIcon("address-book--plus.png")
-      text = "Shelf Manager"
-      tip = "Shelf Manager"
-      self.setIcon(icon)
-      self.setIconText(text)
-      self.setToolTip(tip)
-      
-      self.triggered.connect(parent.showShelfConfig)
 
-         
-class FilterAction(QtWidgets.QAction) :
-   def __init__(self,parent,*args,**kwargs) :
-      super(FilterAction,self).__init__(parent,*args,**kwargs)
-      
-      self.parent = parent
-      icon = QtGui.QIcon("funnel--plus.png")
-      text = "Filter"
-      tip = "Filter alarms"
-      self.setIcon(icon)
-      self.setIconText(text)
-      self.setToolTip(tip)
-      
-      self.triggered.connect(parent.showFilter)
-   
+

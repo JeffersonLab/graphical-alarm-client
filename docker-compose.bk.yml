@@ -7,11 +7,13 @@ networks:
 
 services:
   zookeeper:
-    image: debezium/zookeeper:1.4.0.Final
+    image: debezium/zookeeper:1.3
     hostname: zookeeper
     container_name: zookeeper
     ports:
       - "2181:2181"
+      - "2888:2888"
+      - "3888:3888"
     networks:
       - graphnet
 
@@ -24,8 +26,6 @@ services:
     ports:
       - "9092:9092"
     environment:
-      KAFKA_HOME: "/kafka"
-      BOOTSTRAP_SERVER: "kafka:9092"
       ZOOKEEPER_CONNECT: 'zookeeper:2181'
       CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,shelved-alarms:1:1:compact'
     networks:
@@ -43,6 +43,21 @@ services:
     environment:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_HOST_NAME: registry
+    networks:
+      - graphnet
+
+  console:
+    image: slominskir/kafka-alarm-system:1.1.0
+    hostname: console
+    container_name: console
+    depends_on:
+      - zookeeper
+      - kafka
+      - registry
+    environment:
+      BOOTSTRAP_SERVERS: "kafka:9092"
+      SCHEMA_REGISTRY: "http://registry:8081"
+      ALARM_DEFINITIONS: "channel1|channel1|INJ|RF|/|/,channel2|channel2|INJ|RF|/|/,channel3|channel3|INJ|RF|/|/"
     networks:
       - graphnet
 
@@ -68,31 +83,7 @@ services:
     networks:
       - graphnet
   
-  jaws:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
-    tty: true
-    stdin_open: true
-    hostname: jaws
-    container_name: jaws
-    depends_on:
-      - zookeeper
-      - kafka
-      - registry
-    environment:
-      BOOTSTRAP_SERVERS: "kafka:9092"
-      SCHEMA_REGISTRY: "http://registry:8081"
-      ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
-    volumes:
-      - ./scripts:/scripts
-      - ./config:/config
-      - ./plugins:/plugins
-      - ./examples/alarm-registrations:/tmp/alarm-registrations
-      
-      
+  
   timer:
     image: slominskir/shelved-timer:1.1.0
     hostname: timer
@@ -105,6 +96,3 @@ services:
     environment:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
-   
-    networks:
-      - graphnet

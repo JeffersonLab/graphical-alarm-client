@@ -4,7 +4,6 @@ import os
 import pwd
 import types
 import click
-import time
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 from confluent_kafka import avro, Producer
@@ -14,9 +13,13 @@ from avro.schema import Field
 
 scriptpath = os.path.dirname(os.path.realpath(__file__))
 
-with open(scriptpath + '/../../schemas/shelved-alarms-value.avsc', 'r') as file:
+with open(scriptpath + '/../../schemas/active-alarms-key.avsc', 'r') as file:
+    key_schema_str = file.read()
+
+with open(scriptpath + '/../../schemas/active-alarms-value.avsc', 'r') as file:
     value_schema_str = file.read()
 
+key_schema = avro.loads(key_schema_str)
 value_schema = avro.loads(value_schema_str)
 
 def delivery_report(err, msg):
@@ -39,9 +42,9 @@ p = Producer({
     'bootstrap.servers': bootstrap_servers,
     'on_delivery': delivery_report})
 
-topic = 'shelved-alarms'
+topic = 'active-alarms'
 
-hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),('producer','set-shelved.py'),('host',os.uname().nodename)]
+hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),('producer','set-active-ack-epics.py'),('host',os.uname().nodename)]
 
 def send() :
     if params.value is None:
@@ -49,35 +52,27 @@ def send() :
     else:
         val_payload = serialize_avro(topic, value_schema, params.value, is_key=False)
 
-    p.produce(topic=topic, value=val_payload, key=params.key, headers=hdrs)
+    key_payload = serialize_avro(topic, key_schema, params.key, is_key=True)
+
+    p.produce(topic=topic, value=val_payload, key=key_payload, headers=hdrs)
     p.flush()
 
 @click.command()
-@click.option('--unset', is_flag=True, help="Remove the alarm")
-@click.option('--expirationseconds', type=int, help="The number of seconds until the shelved status expires, None for indefinite")
-@click.option('--reason', help="The explanation for why this alarm has been shelved")
+@click.option('--ack', type=click.Choice(['MAJOR_ACK', 'MINOR_ACK', 'NO_ACK']), help="The alarm acknowledgement")
 @click.argument('name')
 
-def cli(unset, expirationseconds, reason, name):
+def cli(ack, name):
     global params
 
     params = types.SimpleNamespace()
 
-    params.key = name
+    params.key = {"name": name, "type": "AckEPICS"}
 
-    if unset:
-        params.value = None
-    else:
-        if reason == None:
-            raise click.ClickException("--reason is required")
+    if ack == None:
+        raise click.ClickException(
+            "Must specify option --ack")
 
-        if expirationseconds == None:
-            timestampMillis = None
-        else:
-            timestampSeconds = time.time() + expirationseconds;
-            timestampMillis = int(timestampSeconds * 1000);
-
-        params.value = {"expiration": timestampMillis, "reason": reason}
+    params.value = {"msg": {"ack": ack}}
 
     send()
 

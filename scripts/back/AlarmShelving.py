@@ -3,8 +3,8 @@ from PyQt5.QtCore import Qt, QObject,QThreadPool
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
 
 from utils import *
-
-from AlarmModelView import *
+from Actions import GetSelectedAlarms
+from TableView import *
 
 class ShelfDialog(QtWidgets.QDialog) :
    def __init__(self,parent=None,*args,**kwargs) :
@@ -155,8 +155,8 @@ class ShelfDialog(QtWidgets.QDialog) :
       message = None
       
       #Have any alarms been selected?
-      numselected = CountSelectedAlarms()
-      if (numselected == 0) :
+      numselected = GetSelectedAlarms()
+      if (len(numselected) == 0) :
          ok = False
          message = "Select an alarm to shelve"
       
@@ -190,60 +190,8 @@ class ShelfDialog(QtWidgets.QDialog) :
          return
       
       self.ShelveAlarms()
+      self.Cancel()
                 
 
 
-def ConfirmAlarms(alarmlist,which="Shelve") :
-   alarmnames = []
-   for alarm in alarmlist :
-      alarmname = alarm.GetName()
-      alarmnames.append(alarmname)
-   
-   
-   message = which + " the following alarms?\n\n" + "\n".join(alarmnames)
-   msgBox = QtWidgets.QMessageBox()
-   msgBox.setIcon(QtWidgets.QMessageBox.Question)
-   msgBox.setText(message)
-   msgBox.setStandardButtons(QtWidgets.QMessageBox.Yes|
-      QtWidgets.QMessageBox.Cancel)
-   reply = msgBox.exec()
-      
-   confirm = False
-   if (reply == QtWidgets.QMessageBox.Yes) :
-      confirm = True
-         
-   return(confirm)
-      
-class UnShelveAction(QtWidgets.QAction) :
-   def __init__(self,parent,*args,**kwargs) :
-      super(UnShelveAction,self).__init__(parent,*args,**kwargs)
-      
-      self.parent = parent
-      icon = QtGui.QIcon("address-book--minus.png")
-      text = "Shelf Manager"
-      tip = "Shelf Manager"
-      self.setIcon(icon)
-      self.setIconText(text)
-      self.setToolTip(tip)
-      
-      self.triggered.connect(self.UnShelveAlarms)
-   
-   def UnShelveAlarms(self) :
-      alarmlist = GetSelectedAlarms() 
-      
-      message = None
-      if (len(alarmlist) == 0) :
-         message = "Select an alarm remove from shelf"
-            
-
-         msgBox = QtWidgets.QMessageBox()
-         msgBox.setIcon(QtWidgets.QMessageBox.Warning)
-         msgBox.setText(message)
-         msgBox.setStandardButtons(QtWidgets.QMessageBox.Ok)
-         reply = msgBox.exec()
-         return
-      confirm = ConfirmAlarms(alarmlist,"Unshelve")
-      if (not confirm) :
-         return
-      for alarm in alarmlist :
-         alarm.UnShelveRequest()
+ 

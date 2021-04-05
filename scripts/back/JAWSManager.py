@@ -1,7 +1,5 @@
 
 import sys
-import argparse
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from AlarmThread import *
