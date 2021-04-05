@@ -7,8 +7,9 @@ WORKDIR /
 RUN useradd -r -m -s /bin/bash guiuser
 
 RUN apt-get update \
-    && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk python3-pyqt5 vim \
-    && git clone https://github.com/JeffersonLab/graphical-alarm-client \
+    && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk python3-pyqt5 vim
+
+RUN git clone https://github.com/JeffersonLab/graphical-alarm-client \
     && cd ./graphical-alarm-client/scripts \
     && mkdir /scripts \
     && cp -r * /scripts \

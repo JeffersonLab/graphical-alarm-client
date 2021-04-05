@@ -1,8 +1,14 @@
 # graphical-alarm-client
-A graphical desktop user interface client application for the [kafka-alarm-system](https://github.com/JeffersonLab/kafka-alarm-system).  Written in Python with TK and allows users to:
+An operator desktop human machine interface (HMI) client application for [JAWS](https://github.com/JeffersonLab/jaws).  Written in Python with QT and allows operators to:
 - List active alarms
-- List alarm definitions (including inactive alarms)
+- List registered alarms
+- List shelved alarms
 - Shelve alarms
+- Acknowledge alarms
+- Suppress alarms
+
+![Screenshot](https://github.com/JeffersonLab/graphical-alarm-client/raw/master/screenshot.jpg?raw=true "Screenshot")
+
 ## Docker
 ```
 docker-compose up
