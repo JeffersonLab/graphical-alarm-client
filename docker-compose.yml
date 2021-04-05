@@ -69,6 +69,7 @@ services:
       - graphnet
   
   jaws:
+    image: slominskir/jaws:2.3.0
     build:
       context: .
       dockerfile: Dockerfile
@@ -91,20 +92,3 @@ services:
       - ./config:/config
       - ./plugins:/plugins
       - ./examples/alarm-registrations:/tmp/alarm-registrations
-      
-      
-  timer:
-    image: slominskir/shelved-timer:1.1.0
-    hostname: timer
-    container_name: timer
-    depends_on:
-      - zookeeper
-      - kafka
-      - registry
-      - console
-    environment:
-      BOOTSTRAP_SERVERS: "kafka:9092"
-      SCHEMA_REGISTRY: "http://registry:8081"
-   
-    networks:
-      - graphnet
