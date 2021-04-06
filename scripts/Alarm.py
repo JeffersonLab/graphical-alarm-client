@@ -3,7 +3,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer, QModelIndex
 from utils import *
 from KafkaConnection import ConvertTimeStamp
-from AlarmProperties import *
+from PropertyDialog import *
 from AlarmThread import *
 from utils import *
 
@@ -15,7 +15,9 @@ class Alarm(object) :
    def __init__(self,name,type,params=None) :
       self.name = name
       self.type = type
+     
       self.definition = params
+      
       
       self.propwidget = None
       self.isshelved = False
@@ -25,6 +27,7 @@ class Alarm(object) :
       #acktime   = time of ACKNOWLEDGEMENT  
       #cleartime = time of CLEARING
       self.timestamp = None
+      
       self.acktime = None
       self.cleartime = None
       
@@ -37,16 +40,25 @@ class Alarm(object) :
       
       self.worker = None
       self.counting = False
-   
+      
+      self.debug = False
+      if (self.GetName() == "alarm1") :
+         self.debug = True
+         
    #If alarm already exists, replace previous definition.
    def Configure(self,params) :
       self.definition = params      
-      
+      if (self.GetName() == "alarm1") :
+         self.debug = True
+
      
    #accessors
    def GetName(self) :
       return(self.name)
    
+   def GetType(self) :
+      return(self.type)
+      
    #extract the time stamp from the last active alarm
    def GetTimeStamp(self) :      
       return(self.timestamp)
@@ -83,7 +95,13 @@ class Alarm(object) :
    #And its category
    def GetCategory(self) :
       return(self.GetParam("category"))
-      
+   
+   def GetURL(self) :
+      return(self.GetParam("docurl"))
+  
+   def GetScreenPath(self) :
+      return(self.GetParam("screenpath"))
+        
    #General accessor
    def GetParam(self,param) :
       value = None 
@@ -104,6 +122,7 @@ class Alarm(object) :
 
       self.isshelved = True
       self.Display()
+      self.ConfigProperties()
       
       
    def UnShelve(self) :
@@ -111,6 +130,7 @@ class Alarm(object) :
       self.isshelved = False
       self.Remove()
       self.counting = False
+      self.ConfigProperties()
    
    def GetShelfTime(self) :
       return(self.shelftime)
@@ -185,10 +205,12 @@ class Alarm(object) :
       return(expiration)
       
    def ShelveRequest(self,reason,duration) :
-      expiration = duration
-      if (duration != None) :
-         expiration = self.ConvertDurationString(duration)
-         
+      magnitude = duration
+      seconds = time.time() + magnitude
+      expiration = int(seconds * 1000)
+      
+      
+     
       producer = GetProducer('shelved-alarms')
       print(self.GetName(),reason,expiration)
       
@@ -210,16 +232,23 @@ class Alarm(object) :
        
    #Display the alarm properties
    def ShowProperties(self) :
-      if (self.propwidget != None) :
-         self.propwidget.Close()      
-      self.propwidget = AlarmProperties(self)
+      
+      dialog = self.propwidget
+      if (dialog == None) :
+         dialog = GetManager().PropertyDialog(self)
+      
+      RaiseDialog(dialog)
+      self.propwidget = dialog
+  
    
    #Configure the alarm properties widget
    def ConfigProperties(self) :            
-      if (self.propwidget == None or not WidgetExists(self.propwidget)) :
+      if (self.propwidget == None) :
          return      
-      priority = self.GetPriority()
-      self.propwidget.ConfigProperties(priority)
+      if (self.debug) :
+         print("ALARM CONFIGURE PROPS",self.propwidget)
+      
+      self.propwidget.ConfigureProperties()
 
 #Kafka alarm system connects and monitors to the EPICS.STAT 
 #Kafka type: "DirectCAAlarm"       
@@ -227,12 +256,15 @@ class EpicsAlarm(Alarm) :
    def __init__(self,name,params=None) :
       super(EpicsAlarm,self).__init__(name,"epics",params)
       
+      print("CREATING EPICS ALARM",self.GetName())
       self.stat = None
       self.sevr = None
       self.ack = False
       self.latched = True
       self.latchsevr = None
       
+   #   if (self.debug) :
+    #     print("INIT ALARM TO NONE")
       self.acktime = None
       self.cleartime = None
    
@@ -246,9 +278,11 @@ class EpicsAlarm(Alarm) :
      
    #determine the alarming sevr/stat/latch    
    def SetAlarming(self,ts,status) :
+      
       self.SetSevr(ts,status)      
       self.SetStat(status)
-      self.SetLatchSevr()    
+      self.SetLatchSevr() 
+      self.ConfigProperties()   
    
    #An EPICS alarm's sevr: MAJOR/MINOR/NO_ALARM
    def SetSevr(self,ts,status) :
@@ -260,10 +294,17 @@ class EpicsAlarm(Alarm) :
       if (sevr == "NO_ALARM") :
          self.cleartime = ts        
       else :
+      #   if (self.debug) :
+            #print("\nSET SEVR")
+            #print("ALRTIME",ts)
+            #print("ACKTIME", self.acktime,"\n")
+            
          self.timestamp = ts
-         
+         if (self.acktime != None and self.acktime < self.timestamp) :
+            self.acktime = None
+            
          self.ack = False
-         self.acktime = None
+         
          self.cleartime = ""
       
       self.sevr = sevr
@@ -280,36 +321,35 @@ class EpicsAlarm(Alarm) :
    #Latch severity and severity are intertwined.
    #All use cases for LATCHING alarms only 
    def SetLatchSevr(self) :
-      
+
       sevr = self.GetSevr()
       latchsevr = self.GetLatchSevr()
-      
+
       #If not a latching alarm...easy
       if (not self.IsLatching()) :         
          latchsevr = None
       
+      #acknowledgement came AFTER new alarm
+      elif (self.acktime != None and self.timestamp != None 
+         and self.acktime > self.timestamp) :
+   
+         latchsevr = None
+
       #First time through, latchsevr set to the same as the sevr  
       elif (latchsevr == None or latchsevr == "NO_ALARM") :
+         
+        
          latchsevr = sevr
          
       #Upon invocation of the manager.
       #Alarm has been cleared (NO_ALARM), but not yet acknowledged
       elif (self.acktime != None and self.timestamp == None) :        
          self.sevr = "NO_ALARM"
-      
-      #acknowledgement came AFTER new alarm
-      elif (self.acktime != None and self.acktime > self.timestamp) :
-         
-         #Alarm considered unlatched/acknowledged if the latchsevr 
-         #is at least as great as the sevr
-         if (GetRank(latchsevr) >= GetRank(sevr)) :
-            latchsevr = None
-         else :
-            latchsevr = sevr
-
-      #Translate the latchsevr into sevr, to make easier comparison   
+        
+ 
       self.latchsevr = TranslateACK(latchsevr)
-   
+      
+      
    #Access the latchsevr
    def GetLatchSevr(self) :
       return(TranslateACK(self.latchsevr))
@@ -347,6 +387,7 @@ class EpicsAlarm(Alarm) :
       #alarm is latched
       elif (latched != None) :                
          self.Display()
+      self.ConfigProperties()
 
  ##############################################################  
    
@@ -363,10 +404,8 @@ class EpicsAlarm(Alarm) :
 
    #Get an acknowledgement message form the server
    def ReceiveAck(self,ts,status) :
-      self.latchsevr = self.ExtractAck(status)
+      self.latchsevr = self.ExtractAck(status)           
       self.acktime = ts
-      
-      #self.SetLatchSevr()
             
    #Extract the ack status from the message
    def ExtractAck(self,status) :

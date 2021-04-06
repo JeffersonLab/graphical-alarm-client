@@ -4,21 +4,18 @@ from KafkaConnection import *
 
 #Figure out what type of alarm we're dealing with.
 def ExtractAlarmType(definition) :
-   type = "StreamRuleAlarm"
-     
+   type = "StreamRuleAlarm"     
    producer = definition['producer']  
    if ('pv' in producer) :
       type = "DirectCAAlarm"   
    return(type)
 
-#WORKS FOR ALARM MANAGER
 #Create an alarm of the correct type
 def MakeAlarm(alarmname,type=None,params=None) :
    alarm = None
    
    if (type == None) :
       type = ExtractAlarmType(params)
- 
    if (type == "DirectCAAlarm") :
       alarm = EpicsAlarm(alarmname,params)
    elif (type == "StreamRuleAlarm") :
@@ -92,7 +89,7 @@ class Processor(object) :
          
          #If it's not an error, use the info to create an alarm         
          topic = consumer.GetTopic(msg)
-         alarm = self.CreateAlarm(msg)
+         alarm = self.CreateAlarm(msg,init=True)
          
          #Assign this alarm to the topic/alarmname.
          #subsequent states of this alarmname will overwrite.
@@ -107,7 +104,6 @@ class Processor(object) :
    def InitProcess(self) :
       pass
    
-
    #This is the worker thread that periodically checks for messages
    #after initial startup
    def GetAlarms(self) :
@@ -127,7 +123,7 @@ class Processor(object) :
       pass
             
    #Create the new alarm as appropriate to the topic
-   def CreateAlarm(self,msg) :
+   def CreateAlarm(self,msg,init=False) :
       topic = msg.topic()
       alarm = None      
       
@@ -138,12 +134,11 @@ class Processor(object) :
       elif (topic == "shelved-alarms") :               
          alarm = self.ShelvedAlarm(msg)     
       return(alarm) 
-      
-   
+        
    #We have received a message from the "active-alarms" topic
-   def ActiveAlarm(self,msg) :
+   def ActiveAlarm(self,msg,init=False) :
+      
       kafkaconsumer = self.kafkaconsumer
-      #timestamp = kafkaconsumer.DecodeTimeStamp(msg)
       alarmname = kafkaconsumer.DecodeAlarmName(msg)
       msgtype = kafkaconsumer.DecodeMsgType(msg)
       
@@ -158,32 +153,31 @@ class Processor(object) :
       if (alarm == None) :
          type = GetAlarmType(msgtype)
          alarm = MakeAlarm(alarmname,type)
-      
                      
       #And add it to the master list of active-alarms         
       AddActiveAlarm(alarm)
       return(alarm)
       
-   
+   #Received a message from the shelving topic. 
    def ShelvedAlarm(self,msg) :
       consumer = self.kafkaconsumer
       
-      #When registering an alarm, the msg is the alarm definition
-      #(alarmname,definition,msgtype) = consumer.DecodeMessage(msg)
+      #When shelving an alarm, the msg is the alarm definition
       definition = consumer.DecodeMsgValue(msg)
       alarmname = consumer.DecodeAlarmName(msg)
       
-      #It is possible that an active alarm comes in before it has been
+      #It is possible that a shelved alarm comes in before it has been
       #registered. 
       alarm = FindAlarm(alarmname)
+      
+      #If the alarm has not been registered, create an empty one.
       if (alarm == None) :
          alarm = Alarm(alarmname,'shelved')
       
-      
+      #None, on the shelving topic = removed from shelf.          
       if (definition == None) :
          alarm.UnShelve()
-      else :
-         
+      else :        
          alarm.Shelve()
       
       AddShelvedAlarm(alarm)
@@ -199,10 +193,10 @@ class Processor(object) :
       #It is possible that an active alarm comes in before it has been
       #registered. 
       alarm = FindAlarm(alarmname)
+      
       #Is there already an alarm for this alarmname?
       #If so, reconfigure it.
-      if (alarm != None) :
-         
+      if (alarm != None) :        
          alarm.Configure(definition)
       else :
          #if not, create a new one.

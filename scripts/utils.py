@@ -6,7 +6,8 @@ import re
 #import psutil
 import pytz
 import time
-from PyQt5.QtGui import QIcon, QPixmap, QImage
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtGui import QIcon, QPixmap, QImage, QFont, QColor
 
 from KafkaConnection import *
 
@@ -44,7 +45,7 @@ ALARMSTATUS = {
    "ACK"       : {
       "rank" : 2 ,"color" : 'white' , "image" : None} ,
    "NO_ALARM"  : {
-      "rank" : 0, "color" : 'green' , "image" : None, "shelved" : None},
+      "rank" : 0, "color" : 'white' , "image" : None, "shelved" : None},
 }
 
 SOURCEDIR = "./"
@@ -61,6 +62,52 @@ def checkIfProcessRunning(name) :
          pass
       return False
 
+def MakeBold(label) :
+   font = QtGui.QFont()
+   font.setBold(True)
+   label.setFont(font)
+   
+####### CREATE PROPERTY ROWS #####
+def MakeLabel(text,bold=True) :
+   label = QtWidgets.QLabel(text)
+   if (bold) :
+      MakeBold(label)
+   return(label)
+  
+def RaiseDialog(dialog) :
+   dialog.show()
+   dialog.activateWindow()
+   dialog.raise_()
+
+def FormatTime(timestamp) :
+   formatted = None
+   if (timestamp != None) :
+      formatted =  timestamp.strftime("%Y-%m-%d %H:%M:%S")
+   
+   return(formatted)
+ 
+def ConfirmAlarms(alarmlist,which="Shelve") :
+   alarmnames = []
+   for alarm in alarmlist :
+      alarmname = alarm.GetName()
+      alarmnames.append(alarmname)
+   
+   
+   message = which + " the following alarms?\n\n" + "\n".join(alarmnames)
+   msgBox = QtWidgets.QMessageBox()
+   msgBox.setIcon(QtWidgets.QMessageBox.Question)
+   msgBox.setText(message)
+   msgBox.setStandardButtons(QtWidgets.QMessageBox.Yes|
+      QtWidgets.QMessageBox.Cancel)
+   reply = msgBox.exec()
+      
+   confirm = False
+   if (reply == QtWidgets.QMessageBox.Yes) :
+      confirm = True
+         
+   return(confirm)
+      
+   
 def SetProcessor(processor) :
    global PROCESSOR
    PROCESSOR = processor
@@ -91,7 +138,18 @@ def GetRank(status) :
       return(None)
    return(ALARMSTATUS[status]['rank'])
 
+#Little utility so that it's not necessary to keep track
+#of the rows in case more/less are needed.
+def NextRow(widget) :
+   row = widget.row
+   if (row != None) :
+      row = row + 1
+   else :
+      row = 0
+   widget.row = row
+   return(row)
 
+   
 def WidgetExists(widget) :
    return(widget.winfo_exists())
    
@@ -100,7 +158,7 @@ def GetShelvedImage(status) :
    color = GetStatusColor(status)
    if (color != None) :
       if (ALARMSTATUS[status]['shelved'] == None) :
-         filename = IMAGEPATH + color + "-shelved.png"
+         filename = IMAGEPATH + color + "-small.png"
          image = tk.PhotoImage(file=filename)
          ALARMSTATUS[status]['shelved'] = image
       image = ALARMSTATUS[status]['shelved']
@@ -115,7 +173,8 @@ def GetStatusImage(status) :
   
    if (color != None) :
       if (ALARMSTATUS[status]['image'] == None) :
-         filename = IMAGEPATH + color + "-ball.png"
+         filename = IMAGEPATH + color + "-big.png"
+ 
          image = QImage(filename)
          pixmap = QPixmap.fromImage(image)
          
@@ -141,7 +200,14 @@ def TranslateACK(status) :
          if (ack == "NO") :
             ack = status
    return(ack)
-   
+
+def GetQtColor(status) :
+   color = GetStatusColor(status)
+   if (color != None) :
+      return(QColor(color))
+      
+   return None
+
 def GetStatusColor(status) :
    status = TranslateACK(status)
       
@@ -206,9 +272,12 @@ def FindShelvedAlarm(alarmname) :
    
 #Add and access active alarms
 def AddActiveAlarm(alarm) :
+   
    ACTIVEALARMS[alarm.GetName()] = alarm
 
-      
+def GetActiveAlarms() :
+   return(ACTIVEALARMS)
+     
 def FindActiveAlarm(alarmname) :
    found = None
    if (alarmname in ACTIVEALARMS) :

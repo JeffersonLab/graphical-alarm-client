@@ -47,9 +47,10 @@ class ShelfProcessor(Processor) :
       
       if (topic == "shelved-alarms") :
          #Deal with the shelved topic
+         print("SHELVED?",alarm.IsShelved())
          if (alarm.IsShelved()) :          
             alarm.Display()
-            print("START COUNTDOWN")
+            
             alarm.StartCountDown()
          else :           
             alarm.Remove()

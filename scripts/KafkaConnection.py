@@ -50,10 +50,6 @@ class KafkaConnection(object) :
     
       #Access the latest schema
       for topic in self.topics :
-         #THIS IS JUST UNTIL SHELVING IS IMPLEMENTED
-      #   if ("shelved" in topic) :
-       #     continue
-            
          if (topic in self.schemamap) :
             continue
          
@@ -80,7 +76,6 @@ class KafkaConnection(object) :
       
       latest_schema = self.schemamap['registered-alarms']['value']
       
-     
       categories = latest_schema.fields[2].type.symbols
       locations = latest_schema.fields[1].type.symbols
       

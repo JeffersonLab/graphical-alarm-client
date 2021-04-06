@@ -33,7 +33,9 @@ class AlarmProcessor(Processor) :
       active = self.initalarms['active-alarms']               
       for alarmname in active.keys() :       
          alarm = active[alarmname]   
-         alarm.Activate()         
+         
+         alarm.Activate()        
+        
      
    #For registered alarms, we want to make sure that 
    #it is activated as appropriate.
@@ -47,9 +49,7 @@ class AlarmProcessor(Processor) :
    def ProcessAlarms(self,msg) :
       consumer = self.kafkaconsumer      
       topic = consumer.GetTopic(msg)
-      
-      if (msg != None) :
-         print("        *PROCESSALARMS",msg)
+
       #Create the alarm
       alarm = self.CreateAlarm(msg)
       
@@ -70,7 +70,7 @@ class AlarmProcessor(Processor) :
             alarm.Remove()  
    
    #We have received a message from the "active-alarms" topic
-   def ActiveAlarm(self,msg) :
+   def ActiveAlarm(self,msg,init=False) :
       #The parent class does most of the work. 
       alarm  = super().ActiveAlarm(msg)
       
@@ -85,10 +85,14 @@ class AlarmProcessor(Processor) :
          alarm.ReceiveAck(timestamp,status)
       else :
          #Set the alarm's sevr/status       
-         alarm.SetAlarming(timestamp,status)
-                           
+         if (not init) :
+            alarm.SetAlarming(timestamp,status)
+      
+      if (not init) :
+         alarm.Activate()                    
+      
       #And add it to the master list of active-alarms         
-      AddActiveAlarm(alarm)
+   #   AddActiveAlarm(alarm)
       return(alarm)
 
      
