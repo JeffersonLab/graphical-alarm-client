@@ -1,9 +1,12 @@
 ---
 version: '3.8'
+<<<<<<< HEAD
 
 networks:
   graphnet:
     name: 'graphical-net'
+=======
+>>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
 
 services:
   zookeeper:
@@ -12,8 +15,11 @@ services:
     container_name: zookeeper
     ports:
       - "2181:2181"
+<<<<<<< HEAD
     networks:
       - graphnet
+=======
+>>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
 
   kafka:
     image: debezium/kafka:1.4.0.Final
@@ -28,8 +34,6 @@ services:
       BOOTSTRAP_SERVER: "kafka:9092"
       ZOOKEEPER_CONNECT: 'zookeeper:2181'
       CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,shelved-alarms:1:1:compact'
-    networks:
-      - graphnet
 
   registry:
     image: confluentinc/cp-schema-registry:6.0.1
@@ -43,8 +47,11 @@ services:
     environment:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_HOST_NAME: registry
+<<<<<<< HEAD
     networks:
       - graphnet
+=======
+>>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
 
   gui:
     build:
@@ -65,9 +72,13 @@ services:
     volumes:
       - ./scripts:/scripts
     entrypoint: bash
+<<<<<<< HEAD
     networks:
       - graphnet
   
+=======
+
+>>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
   jaws:
     image: slominskir/jaws:2.3.0
     build:
