@@ -1,3 +1,8 @@
+#NOTE ABOUT METHOD AND VARIABLE NAMES
+# --- self.myvariable     -- variable for this application
+# --- def MyMethod()      -- method implemented for this application
+# --- def libraryMethod() -- method accessed/overloaded from a python library
+
 #Contains the Alarm and Shelf Models
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -13,12 +18,10 @@ class ModelView(QtCore.QAbstractTableModel) :
       super(ModelView,self).__init__(parent,*args) 
       self.data = data or []
       
-      #Columns that are shared by the Alarm and Shelf managers
-      self.columnconfig = {
-                        'type' : 75,                    
-                        'priority' : 55,
-                        'name' : 200}
-   
+      self.columnconfig = GetManager().columns
+      self.columnlist = list(self.columnconfig)
+      self.filtercols = {}
+      
    #rowCount must be overloaded. 
    #Overload it here, since the same for all children 
    def rowCount(self,index) :
@@ -26,35 +29,130 @@ class ModelView(QtCore.QAbstractTableModel) :
    
    #columnCount must be overloaded
    def columnCount(self,index) :      
-      return(len(self.columns))
+      
+      return(len(self.columnlist))
+   
+   def GetColumnName(self,col) :
+       return(self.columnlist[col])
+   
+   def SetHeader(self,columname,filtered) :      
+      headercol = GetModel().GetColumnIndex(columname)
+      if (filtered) :         
+         self.SetFilter(headercol,True)  
+         GetManager().GetRemoveFilterAction().setChecked(True)
+      else :                  
+         GetManager().GetRemoveFilterAction().SetState()
+         self.SetFilter(headercol,False)
 
+        
    def GetColumnIndex(self,property) :
-     
-      if (not property in self.columns) :
+      
+      if (not property in self.columnlist) :
          index = None
       else :
-         index = self.columns.index(property)
+         index = self.columnlist.index(property)
+      
       return(index)
    
    def GetColWidth(self,property) :
       width = None
+      
       if (property in self.columnconfig) :
-         width = self.columnconfig[property]
+         if ('size' in self.columnconfig[property]) :
+            width = self.columnconfig[property]['size']
+         
       return(width)   
+   
+          
+   def ApplyChanges(self,showlist=None) :
+      
+      if (showlist == None) :
+         showlist = []
+         
+      #The horizontal header for our table model
+      horizheader = GetTable().horizontalHeader()
+      
+      #The col, is the "logical" index for the model.
+      #it's the one that stays constant, no matter what the 
+      #user sees.
+      for col in range(self.columnCount(0)) :        
+         #The "visualindex" is the column index that the user 
+         #is actually seeing. We want to move the visual index
+         #if the user changes the order in the "show" box.
+         visualindex = horizheader.visualIndex(col)
+         
+         #Get the header text for this column
+         header = self.headerData(col,Qt.Horizontal,Qt.DisplayRole)
+         
+         #If the header (lower case) is in the list of properties
+         #to show...
+         if (header.lower() in showlist) :
+            #Where in the showlist is it? 
+            index = showlist.index(header.lower())
+            
+            #Make sure the "logical" column is showing.
+            GetTable().horizontalHeader().showSection(col)
+            #Now, move the visual column to the new index.
+            GetTable().horizontalHeader().moveSection(visualindex,index)          
+         else :
+            #If in the "hide" list, simply hide the column
+            GetTable().horizontalHeader().hideSection(col)
+      
+      #Some columns are wider than others, make sure the header has the
+      #correct width for the property
+      self.ConfigureColumns()
+      
+      #Force the manager to resize to the new size of the table.
+      GetManager().SetSize()
+   
+   #Return the list of columns in the order that they are visible.
+   def VisibleColumnOrder(self) :
 
+      options = []
+      hidden = []
+      horizheader = GetTable().horizontalHeader()
+      
+      #Traverse each column in the table/model
+      for col in range(self.columnCount(0)) :        
+         
+         #The "visualindex" is the column index that the user 
+         #is actually seeing. We want the combobox to be in the same
+         #order as the columns
+         #if the user changes the order in the "show display" box.
+         visualindex = horizheader.visualIndex(col)
+         
+         #Get the header text for this column
+         header = self.headerData(col,Qt.Horizontal,Qt.DisplayRole)
+         if (GetTable().isColumnHidden(col)) :
+            hidden.append(header.lower())
+         else :
+            #Insert the header at the visible index.        
+            options.insert(visualindex,header.lower())
+      
+      for header in hidden :
+         
+         options.append(header)
+      
+      
+      
+      return(options)
+  
    def ConfigureColumns(self) :
       modelindex = self.GetColumnIndex
-      
-      for prop in self.columns :
+      for prop in self.columnlist :
          width = self.GetColWidth(prop)
          if (width != None) :
             GetTable().setColumnWidth(modelindex(prop),width)
+   
+   def UpdateModel(self) :
+      GetManager().SetSize()   
 
    #Add alarm to the data. 
-   def addAlarm(self,alarm) :
+   def AddAlarm(self,alarm) :
       #Remove the alarm from the data first.
       if (alarm in self.data) :
          self.data.remove(alarm)
+      
       
       #Need to emit this signal so that the TableView will be ready
       self.layoutAboutToBeChanged.emit()    
@@ -63,17 +161,12 @@ class ModelView(QtCore.QAbstractTableModel) :
       #Emit signal to the TableView to redraw
       self.layoutChanged.emit()
       
-      #Apply filters if applicable
-      filters = GetManager().filterDialog
-      if (filters != None) :
-         filters.applyFilters()
-      
-      GetManager().toolbar.ConfigToolBar()
+      GetManager().GetToolBar().Configure()
       GetManager().SetSize()
       
          
    #Remove the alarm. 
-   def removeAlarm(self,alarm) :
+   def RemoveAlarm(self,alarm) :
       
       #Double check that the alarm is in the dataset.
       if (alarm in self.data) :        
@@ -84,27 +177,22 @@ class ModelView(QtCore.QAbstractTableModel) :
          #Emit signal to TableView to redraw
          self.layoutChanged.emit()
          
-         #Apply filters.      
-         filters = GetManager().filterDialog
-         if (filters != None) :
-            filters.applyFilters()
-           
-      GetManager().toolbar.ConfigToolBar()
+      GetManager().GetToolBar().Configure()
       GetManager().SetSize()
      
    #Configure the header if the data is filtered      
-   def setFilter(self,column,filtered=False) :
-      #If the user filters the data from the FilterDialog..
+   def SetFilter(self,column,filtered=False) :
+      
+      #If the user filters the data from a filter menu.
       #indicate that on the column header by adding a little
       #filter icon to the columns that have been filtered.
-      try :
-         if (not filtered) :
-            self.filtercols[column] = False
-         else :
-            self.filtercols[column] = True
-         self.headerDataChanged.emit(Qt.Horizontal,column,column)
-      except :
-         pass
+      #try :
+      if (not filtered) :
+         self.filtercols[column] = False
+      else :
+         self.filtercols[column] = True
+      self.headerDataChanged.emit(Qt.Horizontal,column,column)
+ 
    
    #Display headers for the columns
    def headerData(self,section,orientation,role) :
@@ -114,18 +202,18 @@ class ModelView(QtCore.QAbstractTableModel) :
          return
       if (orientation != Qt.Horizontal) :
          return      
-      
       try :
          #Try to add the filter image to the header to show it's filtered 
          if (role == Qt.DecorationRole and self.filtercols[section]) :
             return (QtGui.QPixmap("funnel--plus.png"))
          elif (role == Qt.DecorationRole) :
+            
             return("") 
       except : 
          return("")
       
       if (role == Qt.DisplayRole) :
-         return(self.columns[section].title())
+         return(self.columnlist[section].title())
       
       return(QtCore.QAbstractTableModel.headerData(self,section,orientation,role))
 
@@ -134,10 +222,6 @@ class ModelView(QtCore.QAbstractTableModel) :
 class ShelfModel(ModelView) :
    def __init__(self,data=None,parent=None,*args) :
       super(ShelfModel,self).__init__(data,parent,*args)
-      
-      self.columns = ['type','priority','time left','name','date shelved',
-         'exp date', 'location', 'category','reason']
-      
       
       self.columnconfig['date shelved'] = 150
       self.columnconfig['exp date'] = 150
@@ -230,13 +314,6 @@ class ShelfModel(ModelView) :
 class AlarmModel(ModelView) :
    def __init__(self,data=None,parent = None, *args) :
       super(AlarmModel,self).__init__(data,parent,*args) 
- 
-      self.columnconfig['timestamp'] = 150
-      self.columnconfig['status'] = 75
-
-      self.columns = ['type','priority','status','name','timestamp',
-         'location', 'category']
- 
       
    #Overloaded function that must be defined.      
    def data(self,index,role) :
@@ -325,22 +402,62 @@ class AlarmModel(ModelView) :
    
    
 
-
+#proxyModel->invalidate();
 class ProxyModel(QtCore.QSortFilterProxyModel) :
    def __init__(self,*args,**kwargs) :
       super(ProxyModel,self).__init__(*args,**kwargs)
-      self.filtercol = None
       
-   def setFilter(self,column,filtered=False) :
-      if (not filtered) :
-         self.filtercol = None
-      else :
-         self.filtercol = column
-
-      self.sourceModel().headerDataChanged.emit(Qt.Horizontal,column,column)
+      self.sortpriority = []
    
-#   def filterAcceptsRow(self,row,parent) :
- #     super(ProxyModel,self).__init__()
+   #Sorting by status is a custom sort, so need to override proxymodel's
+   #lessThan method
+   def lessThan(self,leftindex,rightindex) :
+      #The sort column 
+      col = leftindex.column()
+      
+      #Get the header text for this column
+      header = self.sourceModel().headerData(col,Qt.Horizontal,Qt.DisplayRole)
+      
+      #If not the status column, just sort as normal
+      if (not header.lower() == "status") :
+         return(super(ProxyModel,self).lessThan(leftindex,rightindex))
+      
+      #These values will be put somewhere better...
+      statusvals = ['LATCHED','MAJOR','MINOR']
+      
+      #Get the status of the "left" and "right" alarm
+      leftalarm = self.sourceModel().data[leftindex.row()].GetStatus()
+      rightalarm = self.sourceModel().data[rightindex.row()].GetStatus()
+      
+      #The statusvals list is in order of importance. 
+      #So, compare the index for the alarm's status. Lower wins
+      leftrank = statusvals.index(leftalarm)
+      rightrank = statusvals.index(rightalarm)
+      
+      if (leftrank < rightrank) :
+         return(True)
+      else :
+         return(False)
+    
+   def filterAcceptsRow(self,row,parent) :
+      
+      filters = GetManager().filters
+      if (len(filters) == 0) :
+         
+         GetManager().MakeFilters()
+      
+      index = self.sourceModel().index(row,0,parent)      
+      alarm = self.sourceModel().data[row]
+      
+      keep = True
+      for filter in GetManager().filters :
+         
+         keep = filter.ApplyFilter(alarm)
+               
+         if (not keep) :
+            return(False)
+      if (keep) :
+         return (super(ProxyModel,self).filterAcceptsRow(row,parent))
       
       
 

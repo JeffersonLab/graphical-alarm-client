@@ -8,6 +8,7 @@ class Action(QtWidgets.QAction) :
       
       #Inherited action passes in configuration information
       self.parent = parent      
+
       self.setIcon(self.icon)              
       self.setIconText(self.text)      
       self.setToolTip(self.tip)
@@ -18,29 +19,71 @@ class Action(QtWidgets.QAction) :
    #This subroutine can be overwritten by inherited actions.
    def ConfigToolBarAction(self) :
       pass
-
-
+   
+   #Add an action. Action may be added to a contextmenu, or toolbar
+   def AddAction(self) :
+      
+      #If this isn't a menu, add it to the parent and return
+      if (not isinstance(self.parent,QtWidgets.QMenu)) :
+         self.parent.addAction(self)
+         return(self)
+      
+      #If it is a context menu invoked when alarm(s) are selected
+      #need to determine if 1. The action is valid 2. The text of the action
+      valid = True
+      valid = self.ActionValid()
+      
+      #Only add to the menu if valid
+      if (valid) :
+         text = self.GetText()
+         self.parent.addAction(self)
+         self.setText(text)
+      return(self)
+   
+   #Default validity check. Valid if at least one alarm is selected.
+   #Can be overridden by children
+   def ActionValid(self) :
+      valid = True
+      if (len(GetSelectedAlarms()) == 0) :
+         valid = False
+      return(valid)
+   
+   #Default text depends on the action's "actionword" and
+   #the number of alarms selected.
+   #Can be overridden by children
+   def GetText(self) :
+      actionword = self.actionword
+      text = actionword + " Selected"
+      alarmlist = GetSelectedAlarms()
+      if (len(GetSelectedAlarms()) == 1) :
+         text = actionword + ": " + GetSelectedAlarm().GetName()      
+      return(text)
+  
+#Display user preferences. 
+#This action is added to the toolbar, as well as the "file" menu
 class PrefAction(Action) :
    def __init__(self,parent,*args,**kwargs) :
+      
       self.icon = QtGui.QIcon("gear.png")
       self.text = "Preferences"
       self.tip = "Preferences"
       
       super(PrefAction,self).__init__(parent,*args,**kwargs)
    
+   #Invoke the preferences dialog.
    def PerformAction(self) :
-      #Has a shelfdialog already been created?
-      dialog = GetManager().prefDialog
+      #Has a prefdialog already been created?
+      dialog = GetManager().prefdialog
       
       #If not, create one.
       if (dialog == None) :
          dialog = GetManager().PrefDialog()      
       else :
-         dialog.Reset()
+         #otherwise reset it with the current configuration
+         dialog.Reset()    
       #pop
       RaiseDialog(dialog)      
-      #dialog.Reset()
-      GetManager().prefDialog = dialog
+      GetManager().prefdialog = dialog
 
       
 #ShelfAction 
@@ -52,51 +95,83 @@ class ShelfAction(Action) :
       self.text = "Shelve Alarms"
       self.tip = "Shelve Alarms"
       
+      self.actionword = "Shelve"
       super(ShelfAction,self).__init__(parent,*args,**kwargs)
-   
+         
    #Create/show the ShelfDialog
    def PerformAction(self) :
       
       #Has a shelfdialog already been created?
-      dialog = GetManager().shelfDialog
+      dialog = GetManager().shelfdialog
       
       #If not, create one.
       if (dialog == None) :
          dialog = GetManager().ShelfDialog()      
+      else :
+         dialog.Reset()    
       #pop
       RaiseDialog(dialog)      
-      dialog.Reset()     
-      GetManager().shelfDialog = dialog
+      GetManager().shelfdialog = dialog
    
-   #Configure the tool bar
-   def ConfigToolBarAction(self) :
-      return
-      alarmlist = GetSelectedAlarms()      
-     
-      if (len(alarmlist) == 0) :
-         self.setEnabled(False)
-      else :
-         self.setEnabled(True)
  
-#Filter action         
-class FilterAction(Action) :
-   def __init__(self,parent,*args,**kwargs) :
+#RemoveFilter action 
+#For visual hint of filtered data, this toolbar button is checked 
+#automatically if a filter on any column has been applied
+#If the user DESELECTS the button, all column filters will be removed.  
+#The button is disabled if there are no filters applied to the table
+class RemoveFilterAction(Action) :
+   def __init__(self,parent=None,*args,**kwargs) :
       
-      self.icon = QtGui.QIcon("funnel--plus.png")
-      self.text = "Filter"
-      self.tip = "Filter alarms"
-      super(FilterAction,self).__init__(parent,*args,**kwargs)
+      self.icon = QtGui.QIcon("funnel--minus.png")
+      self.text = "Remove Filters"
+      self.tip = "Remove all Filters"
+      self.parent = parent
+      self.filters = GetManager().GetFilters()
+      #self.prefdialog = None
+      
+      super(RemoveFilterAction,self).__init__(parent,*args,**kwargs)
+      self.setCheckable(True)
    
-   #Create/display the filter dialog
+   #State of buttons depends on all filters.
+   #If a filter has been removed, need to check all other filters 
+   #to determine state
+   def SetState(self) :
+      
+      #Assume that there are no filters on the table
+      filtered = self.GetFilterState()
+     
+      self.setEnabled(filtered)
+      self.setChecked(filtered)
+      
+      #The Preference Dialog (if has been created) should also be 
+      #configured.
+      prefdialog = GetManager().GetPrefDialog()
+      if (prefdialog != None) :        
+         prefdialog.Configure()
+         
+   #Are any filters applied? 
+   def GetFilterState(self) :
+      filtered = False          
+      for filter in self.filters :
+         #if one filter is applied, the manager is filterd
+         if (filter.IsFiltered()) :
+            filtered = True
+            break       
+      return(filtered)
+   
+   #Remove all of the filters    
+   def RemoveAllFilters(self) :
+      for filter in self.filters :
+         filter.SelectAll(True)
+      self.SetState()
+            
+   #Called when the Filter tool bar button is pushed
    def PerformAction(self) :
-      dialog = GetManager().filterDialog      
-      if (dialog == None) :
-         dialog = GetManager().FilterDialog()
+      removefilters = not self.isChecked()
+      if (removefilters) :
+         self.RemoveAllFilters()
+
       
-      RaiseDialog(dialog)      
-      GetManager().filterDialog = dialog
-   
-        
 #PropertyAction 
 #Display the properties for an alarm.  
 class PropertyAction(Action) :
@@ -123,6 +198,19 @@ class PropertyAction(Action) :
    def PerformAction(self) :
       alarm = GetSelectedAlarms()[0]
       alarm.ShowProperties()
+   
+   #Action only valid if one, and only one alarm has been selected.
+   def ActionValid(self) :
+      valid = True
+      num = len(GetSelectedAlarms())
+      if (num != 1) :
+         valid = False
+      return(valid)
+   
+   #Text for menu item   
+   def GetText(self) :
+      text = "Properties: " + GetSelectedAlarm().GetName()
+      return(text)
 
 #Acknowledge Action      
 class AckAction(Action) :
@@ -132,6 +220,7 @@ class AckAction(Action) :
       self.text = text
       self.tip = "Acknowledge"
       
+      self.actionword = "Ack"
       super(AckAction,self).__init__(parent,*args,**kwargs)
      
    #Determine which selected alarms need to be acknowledged
@@ -145,6 +234,15 @@ class AckAction(Action) :
             not "NO_ALARM" in alarm.GetLatchSevr()) :
             needsack.append(alarm)
       return(needsack) 
+   
+   #Action is only valid if there is at least one alarm that
+   #needs to be acknowledged
+   def ActionValid(self) :
+      valid = False
+      needsack = self.GetAlarmsToBeAcknowledged()
+      if (len(needsack) > 0) :
+         valid = True
+      return(valid)
    
    #Configure the toolbar button as appropriate
    def ConfigToolBarAction(self) :
@@ -169,6 +267,8 @@ class UnShelveAction(Action) :
       self.text = "Shelf Manager"
       self.tip = "Shelf Manager"
       
+      self.actionword = "Unshelve"
+      
       super(UnShelveAction,self).__init__(parent,*args,**kwargs)
 
    #Configure the toolbar as appropriate
@@ -180,6 +280,7 @@ class UnShelveAction(Action) :
       else :
          self.setEnabled(True)
    
+ 
    #Unshelve the selected alarms      
    def PerformAction(self) :
       alarmlist = GetSelectedAlarms() 
@@ -202,12 +303,24 @@ class UnShelveAction(Action) :
       for alarm in alarmlist :
          alarm.UnShelveRequest()
 
+#Get the single alarm that is selected.
+def GetSelectedAlarm() :
+   alarmlist = GetSelectedAlarms()
+
+   alarm = None
+   if (len(alarmlist) > 0) :
+      alarm = alarmlist[0]
+   return(alarm)
+        
+
 #Get the list of alarms that have been selected on the table
 def GetSelectedAlarms() :
    alarmlist = []
-   proxymodel = GetTable().model()      
-   sourcemodel = proxymodel.sourceModel()
-         
+   
+   #Access both the proxy model and the sourcemodel
+   proxymodel = GetProxy() 
+   sourcemodel = GetModel()     
+   
    #The indices returned are that of the proxymodel, which is what 
    #the table LOOKS like. We need the source model index to identify the
    #actual selected alarm.
@@ -224,7 +337,7 @@ def GetSelectedAlarms() :
 
 #If a row is selected, configure tool bar as appropriate.
 def RowSelected() :
-   GetManager().toolbar.ConfigToolBar()
+   GetManager().GetToolBar().Configure()
       
 
 

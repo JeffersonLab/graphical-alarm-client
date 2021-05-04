@@ -1,4 +1,4 @@
-from ActiveAlarm import *
+from Alarm import *
 
 from KafkaConnection import *
 
@@ -30,8 +30,8 @@ class Processor(object) :
    def __init__(self) :      
                  
       #Create the KafkaConsumer. To listen for messages.
-      self.kafkaconsumer = KafkaConsumer()
-      SetConsumer(self.kafkaconsumer)
+      self.kafkaconsumer = GetConsumer()
+      #SetConsumer(self.kafkaconsumer)
 
       self.topicloaded = {}
       self.initalarms = {}
@@ -51,7 +51,6 @@ class Processor(object) :
       #Get and create the first batch of alarms upon connection
       self.InitState()
       self.InitProcess()
-
                    
    #Get the initial state of the alarm handler system. 
    #There will be a flurry of alarms upon start up. 

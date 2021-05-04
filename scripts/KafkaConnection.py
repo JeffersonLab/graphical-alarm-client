@@ -58,13 +58,16 @@ class KafkaConnection(object) :
          self.schemamap[topic]['key'] = None
          
          valueschema = topic + "-value"
+         
          keyschema = topic + "-key" 
+         
          try :          
            
             self.schemamap[topic]['value'] = \
                schema_registry.get_latest_schema(valueschema)[1]
             
-            #Only "key schema" right now is the "active-alarms"
+           
+            #Only "key schema" right now is the "overridden-alarms"
             if ("active" in topic) :
                self.schemamap[topic]['key'] = \
                schema_registry.get_latest_schema(keyschema)[1]

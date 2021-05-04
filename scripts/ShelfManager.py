@@ -20,13 +20,11 @@ class ShelfManager(JAWSManager) :
       #alarms that are already shelved. 
       #After initialization, they'll be displayed
       self.shelfqueue = []
-     
+      
+      self.manager = "shelfmanager"
       super(ShelfManager,self).__init__("JAWS - Alarm Shelf","shelf",
          *args,**kwargs)
-      
-      GetModel().ConfigureColumns()
-   
-   
+            
    #The following create the Shelf specific pieces
    
    #Table

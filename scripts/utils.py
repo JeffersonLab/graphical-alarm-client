@@ -1,15 +1,21 @@
+
 import datetime
 import tempfile  
-import tkinter as tk
-from tkinter import *
+
 import re 
-#import psutil
+import getpass
 import pytz
 import time
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QIcon, QPixmap, QImage, QFont, QColor
 
 from KafkaConnection import *
+
+#NOTE ABOUT METHOD AND VARIABLE NAMES
+# --- self.myvariable     -- variable for this application
+# --- def MyMethod()      -- method implemented for this application
+# --- def libraryMethod() -- method accessed from a python library
+
 
 DEPLOY = "ops"
 
@@ -23,6 +29,7 @@ ACTIVEPANE = None
 SHELVEDPANE = None
 MODEL = None
 TABLE = None
+PROXY = None
 
 REGISTEREDALARMS = {}
 ACTIVEALARMS = {}
@@ -49,9 +56,12 @@ ALARMSTATUS = {
 }
 
 SOURCEDIR = "./"
-   
+ 
+def GetUser() :
+   return(getpass.getuser())
+
 ####
-def checkIfProcessRunning(name) :
+def CheckIfProcessRunning(name) :
    return False
    for proc in psutil.process_iter() :
       try :
@@ -108,12 +118,12 @@ def ConfirmAlarms(alarmlist,which="Shelve") :
    return(confirm)
       
    
-def SetProcessor(processor) :
-   global PROCESSOR
-   PROCESSOR = processor
+#def SetProcessor(processor) :
+ #  global PROCESSOR
+  # PROCESSOR = processor
    
-def GetProcessor() :
-   return(PROCESSOR)
+#def GetProcessor() :
+ #  return(PROCESSOR)
    
 def GetAlarmType(msgtype) :
    
@@ -132,11 +142,11 @@ def ConvertTimeStamp(seconds) :
    est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
    return(est_ts)
 
-def GetRank(status) :   
-   status = TranslateACK(status)   
-   if (status == None) :
-      return(None)
-   return(ALARMSTATUS[status]['rank'])
+#def GetRank(status) :   
+ #  status = TranslateACK(status)   
+  # if (status == None) :
+   #   return(None)
+   #return(ALARMSTATUS[status]['rank'])
 
 #Little utility so that it's not necessary to keep track
 #of the rows in case more/less are needed.
@@ -149,20 +159,7 @@ def NextRow(widget) :
    widget.row = row
    return(row)
 
-   
-def WidgetExists(widget) :
-   return(widget.winfo_exists())
-   
-def GetShelvedImage(status) :
-   image = None
-   color = GetStatusColor(status)
-   if (color != None) :
-      if (ALARMSTATUS[status]['shelved'] == None) :
-         filename = IMAGEPATH + color + "-small.png"
-         image = tk.PhotoImage(file=filename)
-         ALARMSTATUS[status]['shelved'] = image
-      image = ALARMSTATUS[status]['shelved']
-   return(image)
+
 
 def GetStatusImage(status) :
    
@@ -182,7 +179,14 @@ def GetStatusImage(status) :
       image = ALARMSTATUS[status]['image']
    return(image)
 
-      
+ 
+def SetProxy(proxy) :
+   global PROXY
+   PROXY = proxy
+
+def GetProxy() :
+   return(PROXY)
+        
 def SetModel(model) :
    global MODEL
    MODEL = model
@@ -221,6 +225,9 @@ def SetConsumer(consumer) :
    CONSUMER = consumer
 
 def GetConsumer() :
+   if (CONSUMER == None) :
+      
+      SetConsumer(KafkaConsumer())
    return(CONSUMER)
    
 def SetProducer(producer,topic) :
@@ -275,8 +282,7 @@ def AddActiveAlarm(alarm) :
    
    ACTIVEALARMS[alarm.GetName()] = alarm
 
-def GetActiveAlarms() :
-   return(ACTIVEALARMS)
+
      
 def FindActiveAlarm(alarmname) :
    found = None
@@ -309,7 +315,7 @@ def SetAlarmList(alarmlist) :
    ALARMLIST = alarmlist
 
 def GetAlarmList() :
-   return(ALARMLIST)
+   return(GetModel().data)
    
 def SetShelvedList(shelvedlist) :
    global SHELVEDLIST
@@ -351,16 +357,15 @@ def SetManager(manager) :
 def GetManager() :
    return(MANAGER)   
 
+def WhichManager() :
+   return(MANAGER.manager)
+   
 def SetTable(table) :
    global TABLE
    TABLE = table
 
 def GetTable() :
    return(TABLE)
-   
-#Determine if a widget exists
-def WidgetExists(widget) :
-   return(widget.winfo_exists())
 
 
 #Create the timestamp for the datafile, using the current time.   

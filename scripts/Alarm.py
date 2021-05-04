@@ -7,6 +7,11 @@ from PropertyDialog import *
 from AlarmThread import *
 from utils import *
 
+#NOTE ABOUT METHOD AND VARIABLE NAMES
+# --- self.myvariable     -- variable for this application
+# --- def MyMethod()      -- method implemented for this application
+# --- def libraryMethod() -- method accessed from a python library
+
 
 #Encapsulate an alarm object
 class Alarm(object) :
@@ -101,7 +106,9 @@ class Alarm(object) :
   
    def GetScreenPath(self) :
       return(self.GetParam("screenpath"))
-        
+    
+   def GetPriority(self) :
+      return(self.GetParam("priority"))    
    #General accessor
    def GetParam(self,param) :
       value = None 
@@ -156,7 +163,7 @@ class Alarm(object) :
                self.shelfexpire = None
             else :  
                self.shelfexpire = ConvertTimeStamp(expiration)
-               print(expiration,"EXPERATION!!",self.shelfexpire)
+               
          if ('reason' in shelfstatus) :
             reason = shelfstatus['reason']
             self.shelfreason = reason      
@@ -212,7 +219,7 @@ class Alarm(object) :
       
      
       producer = GetProducer('shelved-alarms')
-      print(self.GetName(),reason,expiration)
+      
       
       producer.ShelveMessage(self.GetName(),reason,expiration)
    
@@ -224,11 +231,11 @@ class Alarm(object) :
    #Remove an inactive alarm from the alarm model
    def Remove(self) :
    
-      GetModel().removeAlarm(self)
+      GetModel().RemoveAlarm(self)
    
    #Add an active alarm to the alarm model
    def Display(self) :
-      GetModel().addAlarm(self)
+      GetModel().AddAlarm(self)
        
    #Display the alarm properties
    def ShowProperties(self) :
@@ -245,8 +252,7 @@ class Alarm(object) :
    def ConfigProperties(self) :            
       if (self.propwidget == None) :
          return      
-      if (self.debug) :
-         print("ALARM CONFIGURE PROPS",self.propwidget)
+      
       
       self.propwidget.ConfigureProperties()
 
@@ -256,15 +262,12 @@ class EpicsAlarm(Alarm) :
    def __init__(self,name,params=None) :
       super(EpicsAlarm,self).__init__(name,"epics",params)
       
-      print("CREATING EPICS ALARM",self.GetName())
       self.stat = None
       self.sevr = None
       self.ack = False
       self.latched = True
       self.latchsevr = None
-      
-   #   if (self.debug) :
-    #     print("INIT ALARM TO NONE")
+
       self.acktime = None
       self.cleartime = None
    
@@ -294,10 +297,6 @@ class EpicsAlarm(Alarm) :
       if (sevr == "NO_ALARM") :
          self.cleartime = ts        
       else :
-      #   if (self.debug) :
-            #print("\nSET SEVR")
-            #print("ALRTIME",ts)
-            #print("ACKTIME", self.acktime,"\n")
             
          self.timestamp = ts
          if (self.acktime != None and self.acktime < self.timestamp) :
@@ -309,6 +308,16 @@ class EpicsAlarm(Alarm) :
       
       self.sevr = sevr
    
+   #Combines the alarm severity and latch severity to get a status
+   #that can be filtered and sorted.
+   def GetStatus(self) :
+      status = None
+      if (self.GetLatchSevr() != None) :
+         status = "LATCHED"
+      else :
+         status = self.GetSevr()
+      return(status)
+      
    #Read the kafka message and access the sevr
    def ExtractSevr(self,status) :
       sevr = status['msg']['sevr']            

@@ -2,6 +2,12 @@ import time
 import traceback
 from PyQt5.QtCore import Qt, QObject, pyqtSignal, QRunnable
 
+#NOTE ABOUT METHOD AND VARIABLE NAMES
+# --- self.myvariable     -- variable for this application
+# --- def MyMethod()      -- method implemented for this application
+# --- def libraryMethod() -- method accessed from a python library
+
+
 #Signals available from running worker.
 #Must inherit from QObject, which can emit signals
 class WorkerSignals(QObject) :
@@ -47,5 +53,5 @@ class Worker(QRunnable) :
          time.sleep(delay)
    
    #Stop the thread   
-   def stop(self) :
+   def Stop(self) :
       self.running = False
