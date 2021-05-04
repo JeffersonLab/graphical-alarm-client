@@ -1,100 +1,86 @@
 ---
+
 version: '3.8'
-<<<<<<< HEAD
 
 networks:
-  graphnet:
-    name: 'graphical-net'
-=======
->>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
+   graphnet:
+      name: 'graphical-net'
 
 services:
-  zookeeper:
-    image: debezium/zookeeper:1.4.0.Final
-    hostname: zookeeper
-    container_name: zookeeper
-    ports:
-      - "2181:2181"
-<<<<<<< HEAD
-    networks:
-      - graphnet
-=======
->>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
+   zookeeper:
+      image: debezium/zookeeper:1.4.0.Final
+      hostname: zookeeper
+      container_name: zookeeper
+      ports:
+         - "2181:2181"
 
-  kafka:
-    image: debezium/kafka:1.4.0.Final
-    hostname: kafka
-    container_name: kafka
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_HOME: "/kafka"
-      BOOTSTRAP_SERVER: "kafka:9092"
-      ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,shelved-alarms:1:1:compact'
+   kafka:
+      image: debezium/kafka:1.4.0.Final
+      hostname: kafka
+      container_name: kafka
+      depends_on:
+         - zookeeper
+      ports:
+         - "9092:9092"
+      environment:
+         KAFKA_HOME: "/kafka"
+         BOOTSTRAP_SERVER: "kafka:9092"
+         ZOOKEEPER_CONNECT: 'zookeeper:2181'
+         CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,overridden-alarms:1:1:compact'
 
-  registry:
-    image: confluentinc/cp-schema-registry:6.0.1
-    hostname: registry
-    container_name: registry
-    depends_on:
-      - zookeeper
-      - kafka
-    ports:
-      - 8081:8081
-    environment:
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
-      SCHEMA_REGISTRY_HOST_NAME: registry
-<<<<<<< HEAD
-    networks:
-      - graphnet
-=======
->>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
-
-  gui:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
-    tty: true
-    stdin_open: true
-    hostname: gui
-    container_name: gui
-    depends_on:
-      - kafka
-    environment:
-      BOOTSTRAP_SERVERS: kafka:9092
-      SCHEMA_REGISTRY: http://registry:8081
-      DISPLAY: ${DOCKER_DISPLAY}
-    volumes:
-      - ./scripts:/scripts
-    entrypoint: bash
-<<<<<<< HEAD
-    networks:
-      - graphnet
-  
-=======
-
->>>>>>> a517bdd0dba340ce940b58743db926e3fe22ebd7
-  jaws:
-    image: slominskir/jaws:2.3.0
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
-    tty: true
-    stdin_open: true
-    hostname: jaws
-    container_name: jaws
-    depends_on:
-      - zookeeper
-      - kafka
-      - registry
-    environment:
-      BOOTSTRAP_SERVERS: "kafka:9092"
-      SCHEMA_REGISTRY: "http://registry:8081"
-      ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
+   registry:
+      image: confluentinc/cp-schema-registry:6.0.1
+      hostname: registry
+      container_name: registry
+      depends_on:
+         - zookeeper
+         - kafka
+      ports:
+         - 8081:8081
+      environment:
+         SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+         SCHEMA_REGISTRY_HOST_NAME: registry
+         
+   jaws:
+      build:
+         context: .
+         dockerfile: Dockerfile
+         args:
+            - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
+      tty: true
+      stdin_open: true
+      hostname: jaws
+      container_name: jaws
+      depends_on:
+         - zookeeper
+         - kafka
+         - registry
+      environment:
+         BOOTSTRAP_SERVERS: "kafka:9092"
+         SCHEMA_REGISTRY: "http://registry:8081"
+         ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
+      volumes:
+         - ./scripts:/scripts
+         - ./config:/config
+         - ./plugins:/plugins
+         - ./examples/alarm-registrations:/tmp/alarm-registrations
+         
+   gui:
+      build:
+         context: .
+         dockerfile: Dockerfile
+         args:
+            - CUSTOM_CRT_URL=http://pki.jlab.org/JLabCA.crt
+      tty: true
+      stdin_open: true
+      hostname: gui
+      container_name: gui
+      depends_on:
+         - kafka
+      environment:
+         BOOTSTRAP_SERVERS: kafka:9092
+         SCHEMA_REGISTRY: http://registry:8081
+         DISPLAY: ${DOCKER_DISPLAY}
+      volumes:
+         - ./scripts:/scripts
+      entrypoint: bash
