@@ -84,3 +84,5 @@ services:
       volumes:
          - ./scripts:/scripts
       entrypoint: bash
+      networks:
+         - graphnet
