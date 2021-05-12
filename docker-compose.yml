@@ -1,10 +1,6 @@
 ---
 version: '3.8'
 
-networks:
-  graphnet:
-    name: 'graphical-net'
-
 
 services:
   zookeeper:
@@ -13,9 +9,6 @@ services:
     container_name: zookeeper
     ports:
       - "2181:2181"
-
-    networks:
-      - graphnet
 
 
   kafka:
@@ -45,10 +38,6 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_HOST_NAME: registry
 
-    networks:
-      - graphnet
-
-
   gui:
     build:
       context: .
@@ -68,9 +57,6 @@ services:
     volumes:
       - ./scripts:/scripts
     entrypoint: bash
-    networks:
-      - graphnet
-  
 
   jaws:
     image: slominskir/jaws:2.3.0
