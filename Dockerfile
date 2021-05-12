@@ -34,4 +34,3 @@ WORKDIR /scripts
 USER guiuser
 
 ENTRYPOINT ["python"]
-CMD ["hello.py"]
