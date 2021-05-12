@@ -9,7 +9,10 @@ services:
     container_name: zookeeper
     ports:
       - "2181:2181"
+<<<<<<< HEAD
+=======
 
+>>>>>>> d6606e3b4335b2745581a5ae96a817248909d72c
 
   kafka:
     image: debezium/kafka:1.4.0.Final
@@ -23,7 +26,7 @@ services:
       KAFKA_HOME: "/kafka"
       BOOTSTRAP_SERVER: "kafka:9092"
       ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,shelved-alarms:1:1:compact'
+      CREATE_TOPICS: 'registered-alarms:1:1:compact,active-alarms:1:1:compact,overridden-alarms:1:1:compact'
 
   registry:
     image: confluentinc/cp-schema-registry:6.0.1
@@ -37,7 +40,11 @@ services:
     environment:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_HOST_NAME: registry
+<<<<<<< HEAD
+   
+=======
 
+>>>>>>> d6606e3b4335b2745581a5ae96a817248909d72c
   gui:
     build:
       context: .
@@ -60,7 +67,11 @@ services:
 
   jaws:
     image: slominskir/jaws:2.4.0
+<<<<<<< HEAD
+    build:     
+=======
     build:
+>>>>>>> d6606e3b4335b2745581a5ae96a817248909d72c
       context: .
       dockerfile: Dockerfile
       args:
@@ -77,3 +88,4 @@ services:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
       ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
+
