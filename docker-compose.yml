@@ -59,7 +59,7 @@ services:
     entrypoint: bash
 
   jaws:
-    image: slominskir/jaws:2.3.0
+    image: slominskir/jaws:2.4.0
     build:
       context: .
       dockerfile: Dockerfile
