@@ -32,5 +32,3 @@ RUN dpkg -i /scripts/libxcb-util1_0.4.0-0.1_obs_amd64.deb \
 WORKDIR /scripts
 
 USER guiuser
-
-ENTRYPOINT ["python"]
