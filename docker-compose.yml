@@ -72,3 +72,18 @@ services:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
       ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
+  
+  state:
+    image: slominskir/alarm-state-processor:latest
+    hostname: state
+    container_name: state
+    depends_on:
+      - zookeeper
+      - kafka
+      - registry
+      - jaws
+    environment:
+      BOOTSTRAP_SERVERS: "kafka:9092"
+      SCHEMA_REGISTRY: "http://registry:8081"
+
+   
