@@ -3,119 +3,204 @@ import pwd
 import types
 import pytz
 import time
-import json
-
-from utils import *
+#import json
 from datetime import datetime
 
+
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
-from confluent_kafka import avro, Producer, Consumer
-from confluent_kafka.avro.cached_schema_registry_client import CachedSchemaRegistryClient
+
+#  COMMON
 from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.avro.serializer.message_serializer import MessageSerializer as AvroSerde
+from jlab_jaws.avro.subject_schemas.serde import ActiveAlarmSerde, \
+   AlarmStateSerde, OverriddenAlarmValueSerde, RegisteredAlarmSerde
 
-from confluent_kafka.avro.serializer import SerializerError
-from confluent_kafka import OFFSET_BEGINNING
-from avro.schema import Field
+#  PRODUCER
+from confluent_kafka import SerializingProducer
+from confluent_kafka.serialization import StringSerializer, StringDeserializer
+
+#  CONSUMER
+from confluent_kafka.serialization import StringDeserializer
+from jlab_jaws.eventsource.table import EventSourceTable
 
 
-def ConvertTimeStamp(seconds) :
-      #Work in utc time, then convert to local time zone.
-    
-      ts = datetime.fromtimestamp(seconds//1000)
-      utc_ts = pytz.utc.localize(ts)
-      #Finally convert to EST.
-      est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
-      return(est_ts)
+def convert_timestamp(seconds) :
+   """ Convert the message timestamp to local timezone.
+       
+       :param seconds : number of seconds
+       :type seconds : int
+       :returns date string for local timezone
+      
+   """     
+
+   #Work in utc time, then convert to local time zone.    
+   ts = datetime.fromtimestamp(seconds//1000)
+   utc_ts = pytz.utc.localize(ts)
+   #Finally convert to EST.
+   est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
+   return(est_ts)
+
+
+#Convert the timestamp into something readable
+def get_msg_timestamp(msg) :
+   """ Get timestamp of message
+       
+       :param msg : topic messge
+       :type msg: 'cimpl.Message'
+       :returns timestamp in local time zone
+      
+   """        
+   #timestamp from Kafka is in UTC
+   timestamp = msg.timestamp()
+   
+   return(convert_timestamp(timestamp[1]))
+
+ 
+def get_headers(msg) :
+   """ Get message headers
+       
+       :param msg : topic messge
+       :type msg: 'cimpl.Message'
+       :returns list of headers
+      
+   """           
+   headers = msg.headers()
+   return(headers)  
+   
+def get_msg_key(msg) :
+   """ Get message key. 
+       
+       :param msg : topic messge
+       :type msg: 'cimpl.Message'
+       :returns key 
+      
+   """           
+   return(msg.key())
+ 
+def get_msg_value(msg) :
+   """ Get message key. 
+       
+       :param msg : topic messge
+       :type msg: 'cimpl.Message'
+       :returns value object
+      
+   """           
+   return(msg.value())
+
+def get_msg_topic(msg) :
+   """ Get message topic
+       
+       :param msg : topic messge
+       :type msg: 'cimpl.Message'
+       :returns topic
+      
+   """           
+   return(msg.topic())   
 
 class KafkaConnection(object) :
-   def __init__(self) :
+   """ This class sets up the kafka connection for creating consumers and
+       producers
+   """
+   def __init__(self,topic) :
+      """ Create a kafkaconnection for the topic
        
-      self.categories = None
-      self.locations = None
-     
-      self.topics = ['registered-alarms','active-alarms','shelved-alarms']
-      self.schemamap = {}
+       :param topic: Name of topic
+       :type topic: string
+      
+      """           
+
+      self.topic = topic
+      
+      #Initialize connections 
+      self.avro_serdes = {
+         'registered-alarms' : {
+            'serde' : RegisteredAlarmSerde,
+            'deserializer' : None,
+            'serializer'   : None
+         },
+         'active-alarms'     : {
+            'serde' : ActiveAlarmSerde,
+            'deserializer' : None,
+            'serializer'   : None
+         },
+         'alarm-state' : {
+            'serde' : AlarmStateSerde,
+            'deserializer' : None,
+            'serializer'   : None
+         }
+        # 'overridden-alarms' : OverriddenAlarmSerde
+      }
       
       #Magic Kafka configuration
       bootstrap_servers = os.environ.get('BOOTSTRAP_SERVERS', 'localhost:9092')
       self.bootstrap_servers = bootstrap_servers
       
       conf = {'url': os.environ.get('SCHEMA_REGISTRY', 'http://localhost:8081')}
-      schema_registry = CachedSchemaRegistryClient(conf)
-      
-      
-      self.avro_serde = AvroSerde(schema_registry)
+      self.schema_registry = SchemaRegistryClient(conf)
       self.params = types.SimpleNamespace()
-    
-      #Access the latest schema
-      for topic in self.topics :
-         if (topic in self.schemamap) :
-            continue
-         
-         self.schemamap[topic] = {}
-         self.schemamap[topic]['value'] = None
-         self.schemamap[topic]['key'] = None
-         
-         valueschema = topic + "-value"
-         
-         keyschema = topic + "-key" 
-         
-         try :          
-           
-            self.schemamap[topic]['value'] = \
-               schema_registry.get_latest_schema(valueschema)[1]
-            
-           
-            #Only "key schema" right now is the "overridden-alarms"
-            if ("active" in topic) :
-               self.schemamap[topic]['key'] = \
-               schema_registry.get_latest_schema(keyschema)[1]
-         
-         except :
-            print(topic,"FAILED!***")
-            pass     
       
-      
-      latest_schema = self.schemamap['registered-alarms']['value']
-      
-      categories = latest_schema.fields[2].type.symbols
-      locations = latest_schema.fields[1].type.symbols
-      
-      self.categories = categories
-      self.locations = locations
-   
+      self.key_deserializer = StringDeserializer('utf_8')
+      self.key_serializer = StringSerializer()
+         
 
-      
-   #Accessors
-   def GetCategories(self) :
-      return(self.categories)
-      
-   def GetLocations(self) :
-      return(self.locations)
-         
-   def GetTopic(self,msg) :
-      return(msg.topic())
-         
-   def GetTopics(self) :
-      return(self.topics) 
 
-#Create a KafkaProducer. This is a KafkaConnection that
-#PRODUCES and sends messages NOTE: Most of this has been
-#stolen from Ryan's examples
 class KafkaProducer(KafkaConnection) :
-   def __init__(self,topic=None) :
-      super(KafkaProducer,self).__init__()
+   """ KafkaConnection that PRODUCES and sends messages 
+       
+   """
+   #NOTE: Most of this has been stolen from Ryan's examples
+   def __init__(self,topic,name) :
+      """ Create a KafkaProducer instance
+          
+          :param topic: Name of topic
+          :type topic: string
+          :param name: name of producer
+          :type name: string
+
+      """
+      super(KafkaProducer,self).__init__(topic)
       
-      self.serialize_avro = self.avro_serde.encode_record_with_schema
-      self.topic = topic
+      topic = self.topic
+            
+      topic_config = self.avro_serdes[topic]
+      avro_serde = topic_config['serde']
       
-      self.producer = Producer({
-         'bootstrap.servers': self.bootstrap_servers,
-         'on_delivery': self.delivery_report})
+      if (topic_config['serializer'] == None) : 
+         topic_config['serializer'] = \
+            avro_serde.serializer(self.schema_registry)
+      
+      self.value_serializer = topic_config['serializer']
+     
+      ts = time.time()
+      producer_config = {
+                'bootstrap.servers'  : self.bootstrap_servers,
+                'key.serializer'   : self.key_serializer,
+                'value.serializer' : self.value_serializer,
+               }
+      self.producer = SerializingProducer(producer_config)
       self.hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),
-         ('producer','AlarmManager'),('host',os.uname().nodename)]
+         ('producer',name),('host',os.uname().nodename)]
+
    
+   #Create an acknowledge message
+   def ack_message(self,name) :
+      """ Create an acknowledgement message
+          
+          :param name: name of alarm
+          :type name: string
+  
+      """
+      #Build the message to pass to producer. 
+      params = self.params
+      params.value = None
+      params.key = name
+      
+      topic = self.topic
+      producer = self.producer
+      
+      producer.produce(topic=topic, value=params.value, key=params.key, 
+         headers=self.hdrs, on_delivery=self.delivery_report)
+      producer.flush()
+
    #Report success or errors
    def delivery_report(self,err, msg):
     """ Called once for each message produced to indicate delivery result.
@@ -125,198 +210,66 @@ class KafkaProducer(KafkaConnection) :
     else:
         print('Message delivered')
    
-   def UnShelveRequest(self,name) :
-      params = self.params
-      params.key =  name
-      params.value = None
-   
-      self.SendShelfMessage()
       
-   def ShelveMessage(self,name,reason,expiration) :
-      params = self.params
-      params.key = name
-      params.value = {"expiration":expiration,"reason":reason}
-      self.SendShelfMessage()
-   
-   #Create an acknowledge message
-   def AckMessage(self,name,ack) :
-      if (not "ACK" in ack) :
-         ack = ack + "_ACK"         
-     
-      params = self.params
-      params.key = {"name": name, "type": "EPICSAck"}
-      params.value = {"msg": {"ack": ack}}
       
-      self.SendAckMessage()
-   
-   def SendShelfMessage(self) :
-      params = self.params
-      topic = self.topic
-      value_schema = self.schemamap[topic]['value']
       
-      val_payload = None
-      if (params.value != None) :
-         val_payload = self.serialize_avro(topic,value_schema,params.value,
-            is_key=False)
-      self.producer.produce(topic=topic,value=val_payload,key=params.key,
-         headers = self.hdrs)
-      self.producer.flush()
-      
-   #Send a message
-   def SendAckMessage(self) :
-      params = self.params
-      topic = self.topic
-      
-      value_schema = self.schemamap[topic]['value']
-      key_schema = self.schemamap[topic]['key']
-      
-      if (params.value is None) :
-         val_payload = None
-      else:        
-         val_payload = self.serialize_avro(topic, 
-            value_schema, params.value, is_key=False)
-      
-      #Not all topics have an associated "key_schema"
-      #If it doesn't, use the params.key
-     
-      key_payload = self.serialize_avro(topic, key_schema, params.key, 
-            is_key=True)     
-          
-      self.producer.produce(topic=topic, value=val_payload, key=key_payload, 
-         headers=self.hdrs)
-      self.producer.flush()
-   
-   def GetConnection(self) :
-      return(self.producer)
-
-
-#Create a KafkaConsumer. A KafkaConnection that subscribes and
-#receives messages. Again, most stolen from Ryan's examples        
 class KafkaConsumer(KafkaConnection) :
-   def __init__(self) :
-      super(KafkaConsumer,self).__init__()
+   """ KafkaConnection that subscribes to topics and consumes messages 
+   """
+   
+   def __init__(self,topic,init_state,update_state,name,
+      monitor=True) :
       
-      #Make ourselves a consumer
+      """ Create a KafkaConsumer instance
+          
+          :param topic: Name of topic
+          :type topic: string
+          :param init_state: Callback providing initial state
+          :type init_state: (callable(dict))
+          :param update_state: Callback providing updated state
+          :type update_state: (callable(dict))
+          :param name: Name of consumer
+          :type name: string
+          :param monitor : Continue monitoring
+          :type monitor: boolean
+
+      """
+            
+      super(KafkaConsumer,self).__init__(topic)
+      
+      self.name = name
+      
+      topic_config = self.avro_serdes[topic]
+      avro_serde = topic_config['serde']
+      
+      if (topic_config['deserializer'] == None) :
+         topic_config['deserializer'] = \
+            avro_serde.deserializer(self.schema_registry)
+      
+      self.value_deserializer = topic_config['deserializer']
+      
       ts = time.time()
-      self.consumer = Consumer({'bootstrap.servers': self.bootstrap_servers,
-         'group.id': 'AlarmManager' + str(ts)})
+      consumer_config = {'topic': topic,
+                'monitor' : monitor,
+                'bootstrap.servers'  : self.bootstrap_servers,
+                'key.deserializer'   : self.key_deserializer,
+                'value.deserializer' : self.value_deserializer,
+                'group.id' : self.name + " " + str(ts)
+               }
       
-      #And subscribe to the list of topics
-      self.consumer.subscribe(self.topics,on_assign=self.my_on_assign)
-      
-      #Initialize variables
-      self.topicloaded = {}  #lets us know when a topic has been loaded.
-      self.initalarms = {}   #initial set of alarms
-      self.highoffsets = {}  #? 
-      
-      #initialize topic dependent variables
-      for topic in self.topics :
-         self.topicloaded[topic] = False 
-         self.initalarms[topic] = {}
-      
-      self.msgstate = {
-         'registered-alarms' : {},
-         'Alarming' : {},
-         'Ack' : {},
-         'AlarmingEPICS' : {},
-         'AckEPICS' : {},
-         'shelved-alarms' : {}
-      }
- 
-   #We are assuming one partition, otherwise low/high would each be array and 
-   #checking against high water mark would probably not work since other 
-   #partitions could still contain unread messages. RYAN's MAGIC
-   def my_on_assign(self,consumer, partitions):           
-      for p in partitions:
-         p.offset = OFFSET_BEGINNING
-         low, high = consumer.get_watermark_offsets(p)
-         self.highoffsets[p.topic] = high         
-         if (high == 0) :          
-            self.topicloaded[p.topic] = True
-         consumer.assign(partitions)
-   
-   def GetHighOffsets(self,topic) :
-      return(self.highoffsets[topic])
-      
-   def GetConnection(self) :
-      return(self.consumer)
-   
-   #Get the next message from the producer
-   def GetMessage(self,init=False) :
-      consumer = self.GetConnection() 
-      
-      polltime = 0.25
-      if (init) :
-         polltime = 1.0
-      msg = consumer.poll(polltime) 
-      return(msg)
-   
-   #Decode the topic message.
-   def DecodeMessage(self,msg) :
-      
-      topic = msg.topic()
-      
-      if (topic == "active-alarms") :
-         key = self.avro_serde.decode_message(msg.key())  
-         alarmname = key['name']
-         msgtype = key['type']
-         
-      else :
-         key = msg.key().decode('utf-8') 
-         alarmname = key
-         msgtype = topic
-      
-      value = self.avro_serde.decode_message(msg.value())
-      timestamp = self.DecodeTimeStamp(msg)
-      
-      return(alarmname,value,msgtype)
-   
-   def DecodeMsgValue(self,msg) :
-      value = self.avro_serde.decode_message(msg.value())
-      return(value)
-      
-   def DecodeMsgType(self,msg) :
-      topic = msg.topic()
-      
-      if (topic == "active-alarms") :
-         key = self.avro_serde.decode_message(msg.key())  
-         msgtype = key['type']
-      else :
-         msgtype = topic 
-      return(msgtype)
-      
-      
-   def DecodeAlarmName(self,msg) :
-      topic = msg.topic()
-      if (topic == "active-alarms") :
-         key = self.avro_serde.decode_message(msg.key())  
-         alarmname = key['name']
-      else :  
-         key = msg.key().decode('utf-8') 
-         alarmname = key
-      return(alarmname)
-      
+      self.event_table = \
+         EventSourceTable(consumer_config,init_state,update_state)
 
-   #Convert the timestamp into something readable
-   def DecodeTimeStamp(self,msg) :
-      #timestamp from Kafka is in UTC
-      timestamp = msg.timestamp()
+   
+   def start(self) :
+      """ Start the event_table monitoring
+      """
+                
+      self.event_table.start()
+                
+   def stop(self) :
+      """ Stop the event_table
+      """
+      self.event_table.stop()
       
-      return(ConvertTimeStamp(timestamp[1]))
-      #Work in utc time, then convert to local time zone.
-      ts = datetime.fromtimestamp(timestamp[1]//1000)
-      utc_ts = pytz.utc.localize(ts)
-      
-      #Finally convert to EST.
-      est_ts = utc_ts.astimezone(pytz.timezone("America/New_York"))
-  
-      return(est_ts)
-  
-   #Determine if all topics have completed loading.
-   def TopicsLoaded(self) :
-      loaded = True
-      for topic in self.topics :
-         if (not self.topicloaded[topic]) :
-            loaded = False
-      return(loaded)
-
+                  
