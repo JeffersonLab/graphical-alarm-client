@@ -3,22 +3,22 @@
 # --- def MyMethod()      -- method implemented for this application
 # --- def libraryMethod() -- method accessed/overloaded from a python library
 
-#Contains the Alarm and Shelf Models
+#Contains the ModelView class inherited by AlarmModel and OverrideModel
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QBrush
-
+from PyQt5.QtCore import Qt, QObject,QThreadPool,QThread
 from utils import *
 
-#Parent ModelView. AlarmModel and ShelfMmodel inherit         
+#Parent ModelView. AlarmModel and OverrideModel inherit         
 class ModelView(QtCore.QAbstractTableModel) :
    
    def __init__(self,data=None,parent = None, *args) :
       super(ModelView,self).__init__(parent,*args) 
       self.data = data or []
       
-      self.columnconfig = GetManager().columns
+      self.columnconfig = getManager().columns
       self.columnlist = list(self.columnconfig)
       self.filtercols = {}
       
@@ -35,14 +35,14 @@ class ModelView(QtCore.QAbstractTableModel) :
    def GetColumnName(self,col) :
        return(self.columnlist[col])
    
-   def SetHeader(self,columname,filtered) :      
-      headercol = GetModel().GetColumnIndex(columname)
+   def setHeader(self,columname,filtered) :      
+      headercol = getModel().GetColumnIndex(columname)
       if (filtered) :         
-         self.SetFilter(headercol,True)  
-         GetManager().GetRemoveFilterAction().setChecked(True)
+         self.setFilter(headercol,True)  
+         getManager().getRemoveFilterAction().setChecked(True)
       else :                  
-         GetManager().GetRemoveFilterAction().SetState()
-         self.SetFilter(headercol,False)
+         getManager().getRemoveFilterAction().setState()
+         self.setFilter(headercol,False)
 
         
    def GetColumnIndex(self,property) :
@@ -64,13 +64,13 @@ class ModelView(QtCore.QAbstractTableModel) :
       return(width)   
    
           
-   def ApplyChanges(self,showlist=None) :
+   def applyChanges(self,showlist=None) :
       
       if (showlist == None) :
          showlist = []
          
       #The horizontal header for our table model
-      horizheader = GetTable().horizontalHeader()
+      horizheader = getTable().horizontalHeader()
       
       #The col, is the "logical" index for the model.
       #it's the one that stays constant, no matter what the 
@@ -91,26 +91,26 @@ class ModelView(QtCore.QAbstractTableModel) :
             index = showlist.index(header.lower())
             
             #Make sure the "logical" column is showing.
-            GetTable().horizontalHeader().showSection(col)
+            getTable().horizontalHeader().showSection(col)
             #Now, move the visual column to the new index.
-            GetTable().horizontalHeader().moveSection(visualindex,index)          
+            getTable().horizontalHeader().moveSection(visualindex,index)          
          else :
             #If in the "hide" list, simply hide the column
-            GetTable().horizontalHeader().hideSection(col)
+            getTable().horizontalHeader().hideSection(col)
       
       #Some columns are wider than others, make sure the header has the
       #correct width for the property
-      self.ConfigureColumns()
+      self.configureColumns()
       
       #Force the manager to resize to the new size of the table.
-      GetManager().SetSize()
+      getManager().setSize()
    
    #Return the list of columns in the order that they are visible.
    def VisibleColumnOrder(self) :
 
       options = []
       hidden = []
-      horizheader = GetTable().horizontalHeader()
+      horizheader = getTable().horizontalHeader()
       
       #Traverse each column in the table/model
       for col in range(self.columnCount(0)) :        
@@ -123,7 +123,7 @@ class ModelView(QtCore.QAbstractTableModel) :
          
          #Get the header text for this column
          header = self.headerData(col,Qt.Horizontal,Qt.DisplayRole)
-         if (GetTable().isColumnHidden(col)) :
+         if (getTable().isColumnHidden(col)) :
             hidden.append(header.lower())
          else :
             #Insert the header at the visible index.        
@@ -137,36 +137,41 @@ class ModelView(QtCore.QAbstractTableModel) :
       
       return(options)
   
-   def ConfigureColumns(self) :
+   def configureColumns(self) :
       modelindex = self.GetColumnIndex
       for prop in self.columnlist :
          width = self.GetColWidth(prop)
          if (width != None) :
-            GetTable().setColumnWidth(modelindex(prop),width)
+            getTable().setColumnWidth(modelindex(prop),width)
    
    def UpdateModel(self) :
-      GetManager().SetSize()   
+      getManager().setSize()   
 
    #Add alarm to the data. 
-   def AddAlarm(self,alarm) :
+   def addAlarm(self,alarm) :
+      #print(QThread.currentThread())
       #Remove the alarm from the data first.
+      self.layoutAboutToBeChanged.emit()    
       if (alarm in self.data) :
          self.data.remove(alarm)
       
-      
       #Need to emit this signal so that the TableView will be ready
-      self.layoutAboutToBeChanged.emit()    
+      
       #add the alarm to to the model data.
       self.data.append(alarm)
       #Emit signal to the TableView to redraw
       self.layoutChanged.emit()
       
-      GetManager().GetToolBar().Configure()
-      GetManager().SetSize()
+      getManager().getToolBar().configureToolBar()
+      getManager().configureProperties(alarm)
+      getManager().setSize()
+      
+      if (getManager().overridedialog != None) :
+         getManager().overridedialog.reset()
       
          
    #Remove the alarm. 
-   def RemoveAlarm(self,alarm) :
+   def removeAlarm(self,alarm) :
       
       #Double check that the alarm is in the dataset.
       if (alarm in self.data) :        
@@ -177,11 +182,16 @@ class ModelView(QtCore.QAbstractTableModel) :
          #Emit signal to TableView to redraw
          self.layoutChanged.emit()
          
-      GetManager().GetToolBar().Configure()
-      GetManager().SetSize()
+      getManager().getToolBar().configureToolBar()
+      getManager().configureProperties(alarm)
+      getManager().setSize()
+      
+      if (getManager().overridedialog != None) :
+         getManager().overridedialog.reset()
+
      
    #Configure the header if the data is filtered      
-   def SetFilter(self,column,filtered=False) :
+   def setFilter(self,column,filtered=False) :
       
       #If the user filters the data from a filter menu.
       #indicate that on the column header by adding a little
@@ -218,97 +228,6 @@ class ModelView(QtCore.QAbstractTableModel) :
       return(QtCore.QAbstractTableModel.headerData(self,section,orientation,role))
 
 
-#The model used with the ShelfManager.
-class ShelfModel(ModelView) :
-   def __init__(self,data=None,parent=None,*args) :
-      super(ShelfModel,self).__init__(data,parent,*args)
-      
-      self.columnconfig['date shelved'] = 150
-      self.columnconfig['exp date'] = 150
-      self.columnconfig['reason'] = 250
-
-
-   #Overloaded function that must be defined.      
-   def data(self,index,role) :
-      #The index (contains both x,y) and role are passed.  
-      #The roles give instructions about how to display the model.
-      row = index.row()
-      col = index.column()
-            
-      #Center columns
-      if (role == Qt.TextAlignmentRole) : 
-         return(Qt.AlignCenter)
-         
-      #Insert the appropriate information into the display, based
-      #on the column. 
-      if role == Qt.DisplayRole :
-         alarm = self.data[row] 
-         
-         #This is the expiration countdown
-         if (col == self.GetColumnIndex("time left")) :
-            timedisplay = self.DisplayTimeLeft(alarm)
-            return(timedisplay)
-
-         if (col == self.GetColumnIndex("name")) :
-            
-            return(alarm.GetName())
-         
-         if (col == self.GetColumnIndex("date shelved")) :
-            timestamp = alarm.GetShelfTime()
-            if (timestamp != None) :
-               return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-         
-         if (col == self.GetColumnIndex("exp date")) :
-            timestamp = alarm.GetShelfExpiration()
-            if (timestamp != None) :
-               return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-         
-         if (col == self.GetColumnIndex("category")) :
-            return(alarm.GetCategory())
-         if (col == self.GetColumnIndex("location")) :
-            return(alarm.GetLocation())  
-         if (col == self.GetColumnIndex("reason")) :
-            return(alarm.GetShelfReason())
-   
-   #Figure out a pretty way to display the time left until
-   #expiration  
-   def DisplayTimeLeft(self,alarm) :
-      
-      #How much time left? A disabled alarm will not have alarm.timeleft 
-      #defined
-      timeleft = alarm.timeleft
-      
-      if (timeleft ==  None) :
-         return("")
-         
-      #timeleft is a "datetime.timedelta" object.
-      #From this object, we can get the number of seconds and days.     
-      seconds = timeleft.seconds
-      days = timeleft.days
-      
-      #displaytime = str(seconds) + " s"
-      displaytime = ""
-      if (days > 0) :
-         displaytime = str(days) + " days "
-      
-      if (seconds < 60) :
-         displaytime = displaytime + str(seconds) + " sec"
-          
-      elif (seconds > 60 and seconds < 3600) :
-         minutes = '{:0.2f}'.format(seconds / 60)
-         displaytime = displaytime + minutes + " min"
-      
-      elif (seconds > 3600 and seconds < 86400) :
-         if (days > 0) :
-            hours = str(int(seconds/3600))
-            GetManager().GetTable().horizontalHeader().setSectionResizeMode(3,
-               QtWidgets.QHeaderView.ResizeToContents)
-         else :
-            hours = '{:0.2f}'.format(seconds / 3600)
-         displaytime = displaytime + hours + " hours"
-      
-      return(displaytime)
-
        
 #AlarmModel contains the data to disaply in the TableView widget    
 class AlarmModel(ModelView) :
@@ -327,7 +246,7 @@ class AlarmModel(ModelView) :
          return(Qt.AlignCenter)
       
       alarm = self.data[row] 
-      (sevr,latch) = self.GetSevrDisplay(alarm) 
+      (sevr,latch) = self.get_sevrDisplay(alarm) 
       
       if (col == self.GetColumnIndex('status')) :
          if (role == Qt.BackgroundRole) :
@@ -343,63 +262,46 @@ class AlarmModel(ModelView) :
       #on the column. Column "0" is handled by the StatusDelegate
       if role == Qt.DisplayRole :
          if (col == self.GetColumnIndex('status')) :
-            return(sevr)         
+            #Does the alarm have a severity?
+            
+            if (sevr == None) :
+               sevr = "ALARM"
+            
+            return(sevr)
          
          if (col == self.GetColumnIndex('name')) :
-            return(alarm.GetName())
+            return(alarm.get_name())
          
          if (col == self.GetColumnIndex('timestamp')) :
-            
-            timestamp = alarm.GetTimeStamp()  
-            
-            
-            if (timestamp == None) :
-               timestamp = alarm.GetAckTime()
+            timestamp = alarm.get_state_change()
             if (timestamp != None) :
                return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
-         
-         
+                        
          if (col == self.GetColumnIndex('category')) :
-            return(alarm.GetCategory())
+            return(alarm.get_property('category',name=True))
          if (col == self.GetColumnIndex('location')) :
-            return(alarm.GetLocation())  
+            return(alarm.get_property('location',name=True))  
    
-   #Determine which images to use as the status indicators
-   def GetSevrDisplay(self,alarm) :
+   
+   def get_sevrDisplay(self,alarm) :
       
-      #latched and status column display are dependent
-      sevrdisplay = None
-      latchdisplay = None
+      state = alarm.get_state(name=True)
+      latching = alarm.get_latching()
       
-      sevr = alarm.GetSevr()
-      latched = alarm.GetLatchSevr()
-      
-      #Nothing to see here. No alarm, no latching
-      if (sevr == "NO_ALARM" and latched == None) :
-         sevrdisplay = None
-         latchdisplay = None
-      
-      #Latch and alarm cleared   
-      elif (sevr == "NO_ALARM" and latched == "NO_ALARM") :
-         sevrdisplay = None
-         latchdisplay = None
-      
-      #Alarm has cleared, but still latched   
-      elif (sevr == "NO_ALARM") :
-         sevrdisplay = sevr
-         latchdisplay = latched
-      
-      #Alarm in and latched  
-      elif (sevr != "NO_ALARM" and latched != "NO_ALARM") :
-         sevrdisplay = sevr
-         latchdisplay = latched
-        
-      else :
+      sevr = alarm.get_sevr(name=True)
+      latch = None    
+      if (latching) :
+         if (state.lower() == "latched") :
+            latch = sevr
+         elif(state.lower() == "normallatched") :
+            latch = sevr
+            sevr = "NO_ALARM"
+         elif (state.lower() == "active") :
+            latch = None
          
-         print("UNNOWNDISPLAY: SEVR:",sevr,"LATCHED",latched)
+      return(sevr,latch)
+  
      
-      return(sevrdisplay,latchdisplay)
-   
    
 
 #proxyModel->invalidate();
@@ -423,16 +325,19 @@ class ProxyModel(QtCore.QSortFilterProxyModel) :
          return(super(ProxyModel,self).lessThan(leftindex,rightindex))
       
       #These values will be put somewhere better...
-      statusvals = ['LATCHED','MAJOR','MINOR']
+      statusvals = ['LATCHED','MAJOR','ALARM','MINOR',None]
       
       #Get the status of the "left" and "right" alarm
-      leftalarm = self.sourceModel().data[leftindex.row()].GetStatus()
-      rightalarm = self.sourceModel().data[rightindex.row()].GetStatus()
+      leftalarm = self.sourceModel().data[leftindex.row()]
+      leftsevr = leftalarm.get_sevr()
+      
+      rightalarm = self.sourceModel().data[rightindex.row()]
+      rightsevr = rightalarm.get_sevr()
       
       #The statusvals list is in order of importance. 
       #So, compare the index for the alarm's status. Lower wins
-      leftrank = statusvals.index(leftalarm)
-      rightrank = statusvals.index(rightalarm)
+      leftrank = statusvals.index(leftsevr)
+      rightrank = statusvals.index(rightsevr)
       
       if (leftrank < rightrank) :
          return(True)
@@ -441,16 +346,16 @@ class ProxyModel(QtCore.QSortFilterProxyModel) :
     
    def filterAcceptsRow(self,row,parent) :
       
-      filters = GetManager().filters
+      filters = getManager().filters
       if (len(filters) == 0) :
          
-         GetManager().MakeFilters()
+         getManager().makeFilters()
       
       index = self.sourceModel().index(row,0,parent)      
       alarm = self.sourceModel().data[row]
       
       keep = True
-      for filter in GetManager().filters :
+      for filter in getManager().filters :
          
          keep = filter.ApplyFilter(alarm)
                

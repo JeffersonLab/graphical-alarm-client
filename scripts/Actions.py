@@ -1,11 +1,26 @@
+""" 
+.. module:: Actions
+   :synopsis : Create QActions 
+.. moduleauthor::Michele Joyce <erb@jlab.org>
+"""
+
 from utils import *
+from jlab_jaws_helper.JAWSConnection import *
 
 #Define the Actions class
 #Actions can be shared by the tool bars and context menus
 class Action(QtWidgets.QAction) :
+   """ Define the Actions Class. Actions can be shared by the toolbars and 
+       contextmenus
+   """
    def __init__(self,parent,*args,**kwargs) :
       super(Action,self).__init__(parent,*args,**kwargs)
+      """ Create an action
+       
+         :param parent: parent widget
+         :type parent: QMenu or QToolbar
       
+      """    
       #Inherited action passes in configuration information
       self.parent = parent      
 
@@ -13,16 +28,35 @@ class Action(QtWidgets.QAction) :
       self.setIconText(self.text)      
       self.setToolTip(self.tip)
       
-      self.triggered.connect(self.PerformAction)
+      self.triggered.connect(self.performAction)
       
    #Configure the toolbar actions. 
    #This subroutine can be overwritten by inherited actions.
-   def ConfigToolBarAction(self) :
+   def configToolBarAction(self) :
       pass
    
-   #Add an action. Action may be added to a contextmenu, or toolbar
-   def AddAction(self) :
+   def getSelectedAlarms(self) :
+      """ 
+         Get the list of alarms that have been selected on the table
+         :returns list of JAWSAlarms
+      """      
+      return(getTable().getSelectedAlarms())
+   
+   def getSelectedAlarm(self) :
+      """ 
+         Get the single selected alarm 
+         :returns JAWSAlarm
+      """      
+      return(getTable().getSelectedAlarm())
       
+      
+   def addAction(self) :
+      """ 
+         Add an action. 
+         Action may be added to a contextmenu, or toolbarCreate an action
+      
+      """    
+
       #If this isn't a menu, add it to the parent and return
       if (not isinstance(self.parent,QtWidgets.QMenu)) :
          self.parent.addAction(self)
@@ -31,39 +65,59 @@ class Action(QtWidgets.QAction) :
       #If it is a context menu invoked when alarm(s) are selected
       #need to determine if 1. The action is valid 2. The text of the action
       valid = True
-      valid = self.ActionValid()
+      valid = self.actionValid()
       
       #Only add to the menu if valid
       if (valid) :
-         text = self.GetText()
+         text = self.getText()
          self.parent.addAction(self)
          self.setText(text)
       return(self)
-   
-   #Default validity check. Valid if at least one alarm is selected.
-   #Can be overridden by children
-   def ActionValid(self) :
+      
+   def actionValid(self) :
+      """ 
+         Default validity check. Valid if at least one alarm is selected.
+         NOTE: Can be overridden by children
+         
+         returns: valid/invalid 
+      """
       valid = True
-      if (len(GetSelectedAlarms()) == 0) :
+      if (len(self.getSelectedAlarms()) == 0) :
          valid = False
       return(valid)
    
    #Default text depends on the action's "actionword" and
    #the number of alarms selected.
    #Can be overridden by children
-   def GetText(self) :
+   def getText(self) :
+      """ 
+         Default validity check. Valid if at least one alarm is selected.
+         NOTE: Can be overridden by children
+      
+         returns: menu/button text
+      """
+      
       actionword = self.actionword
       text = actionword + " Selected"
-      alarmlist = GetSelectedAlarms()
-      if (len(GetSelectedAlarms()) == 1) :
-         text = actionword + ": " + GetSelectedAlarm().GetName()      
+      alarmlist = self.getSelectedAlarms()
+      if (len(self.getSelectedAlarms()) == 1) :
+         text = actionword + ": " + self.getSelectedAlarm().get_name()      
       return(text)
   
 #Display user preferences. 
 #This action is added to the toolbar, as well as the "file" menu
 class PrefAction(Action) :
+   """ Display user preferences
+       NOTE: This action is added to the toolbar as well as the file menu
+   """
+   
    def __init__(self,parent,*args,**kwargs) :
-      
+      """
+         Create an instance
+         :param parent: parent widget
+         :type parent: QMenu or QToolbar
+      """
+        
       self.icon = QtGui.QIcon("gear.png")
       self.text = "Preferences"
       self.tip = "Preferences"
@@ -71,112 +125,129 @@ class PrefAction(Action) :
       super(PrefAction,self).__init__(parent,*args,**kwargs)
    
    #Invoke the preferences dialog.
-   def PerformAction(self) :
-      #Has a prefdialog already been created?
-      dialog = GetManager().prefdialog
+   def performAction(self) :
+      """ Display the user preferences dialog """
+           
+      dialog = getManager().createPrefDialog()
+      raiseAndResetDialog(dialog)
       
-      #If not, create one.
-      if (dialog == None) :
-         dialog = GetManager().PrefDialog()      
-      else :
-         #otherwise reset it with the current configuration
-         dialog.Reset()    
-      #pop
-      RaiseDialog(dialog)      
-      GetManager().prefdialog = dialog
-
       
-#ShelfAction 
-#Display the shelving configuration dialog.
-class ShelfAction(Action) :
-   def __init__(self,parent,text="Shelve Selected",*args,**kwargs) :
+#OverrideAction 
+#Display the override configuration dialog.
+class OverrideAction(Action) :
+   def __init__(self,parent,text="Override Selected",*args,**kwargs) :
       #Define the action's configuration       
-      self.icon = QtGui.QIcon("address-book--plus.png")
-      self.text = "Shelve Alarms"
-      self.tip = "Shelve Alarms"
+      self.icon = QtGui.QIcon("ssh")
+      self.text = "Override Alarms"
+      self.tip = "Override Alarms"
       
-      self.actionword = "Shelve"
-      super(ShelfAction,self).__init__(parent,*args,**kwargs)
-         
-   #Create/show the ShelfDialog
-   def PerformAction(self) :
-      
-      #Has a shelfdialog already been created?
-      dialog = GetManager().shelfdialog
-      
-      #If not, create one.
-      if (dialog == None) :
-         dialog = GetManager().ShelfDialog()      
-      else :
-         dialog.Reset()    
-      #pop
-      RaiseDialog(dialog)      
-      GetManager().shelfdialog = dialog
+      self.actionword = "Override"
+      super(OverrideAction,self).__init__(parent,*args,**kwargs)
    
- 
-#RemoveFilter action 
-#For visual hint of filtered data, this toolbar button is checked 
-#automatically if a filter on any column has been applied
-#If the user DESELECTS the button, all column filters will be removed.  
-#The button is disabled if there are no filters applied to the table
+   def configToolBarAction(self) :
+      """  The action is only available,if at least one alarm is 
+           being displayed
+      """        
+      if (self.actionValid()) :
+         self.setEnabled(True)
+      else :
+         self.setEnabled(False)
+   
+   def actionValid(self) :
+      """ 
+         Valid if at least one alarm is displayed
+         returns: valid/invalid 
+      """
+      valid = True ### TESTING
+      #if (getModel().rowCount(0) == 0) :
+      #   valid = False
+      return(valid)
+   
+   #Create/show the OverrideDialog
+   def performAction(self) :
+      
+      #Has a overridedialog already been created?
+      dialog = getManager().createOverrideDialog()
+       
+      #pop
+      raiseAndResetDialog(dialog)      
+      
 class RemoveFilterAction(Action) :
+   """
+      For visual hint of filtered data, this toolbar button is checked 
+      automatically if a filter on any column has been applied
+      If the user DESELECTS the button, all column filters will be removed.  
+      The button is disabled if there are no filters applied to the table
+   """
    def __init__(self,parent=None,*args,**kwargs) :
       
       self.icon = QtGui.QIcon("funnel--minus.png")
       self.text = "Remove Filters"
       self.tip = "Remove all Filters"
       self.parent = parent
-      self.filters = GetManager().GetFilters()
-      #self.prefdialog = None
+      self.filters = getManager().getFilters()
       
       super(RemoveFilterAction,self).__init__(parent,*args,**kwargs)
       self.setCheckable(True)
    
-   #State of buttons depends on all filters.
-   #If a filter has been removed, need to check all other filters 
-   #to determine state
-   def SetState(self) :
+ 
+   def setState(self) :
+      """
+         State of buttons depends on all filters.
+         If a filter has been removed, need to check all other filters 
+         to determine state
+      """
       
       #Assume that there are no filters on the table
-      filtered = self.GetFilterState()
+      filtered = self.getFilterState()
      
       self.setEnabled(filtered)
       self.setChecked(filtered)
       
       #The Preference Dialog (if has been created) should also be 
       #configured.
-      prefdialog = GetManager().GetPrefDialog()
+      prefdialog = getManager().getPrefDialog()
       if (prefdialog != None) :        
-         prefdialog.Configure()
+         prefdialog.configureDialog()
          
-   #Are any filters applied? 
-   def GetFilterState(self) :
+   def getFilterState(self) :
+      """
+         Are any filters applied?
+         :returns boolean
+      """      
       filtered = False          
       for filter in self.filters :
-         #if one filter is applied, the manager is filterd
-         if (filter.IsFiltered()) :
+         #if one filter is applied, the manager is filtered
+         if (filter.isFiltered()) :
             filtered = True
             break       
       return(filtered)
    
-   #Remove all of the filters    
-   def RemoveAllFilters(self) :
+   def removeAllFilters(self) :
+      """ Remove all of the filters """
       for filter in self.filters :
-         filter.SelectAll(True)
-      self.SetState()
-            
-   #Called when the Filter tool bar button is pushed
-   def PerformAction(self) :
+         filter.selectAll(True)
+      self.setState()
+               
+   def performAction(self) :     
+      """ Called when the Filter tool bar button is pushed """
       removefilters = not self.isChecked()
       if (removefilters) :
-         self.RemoveAllFilters()
-
-      
-#PropertyAction 
-#Display the properties for an alarm.  
+         self.removeAllFilters()
+ 
 class PropertyAction(Action) :
+   
+   """ Display the properties of an alarm """
+   
    def __init__(self,parent,text="Properties",*args,**kwargs) :
-      
+      """ 
+         Create an instance
+         :param parent: parent widget
+         :type parent: QMenu or QToolbar
+         :param text: Text to be displayed on the parent
+         :type text: string (default = "Properties")
+     
+      """
       #Define the action's configuration          
       self.icon = QtGui.QIcon("application-list.png")
       self.text = "Properties"
@@ -185,37 +256,70 @@ class PropertyAction(Action) :
       #Now call the parent.
       super(PropertyAction,self).__init__(parent,*args,**kwargs)
    
-   #The action is only available, if ONE alarm
-   #is selected.   
-   def ConfigToolBarAction(self) :
-      alarmlist = GetSelectedAlarms()
+  
+   def configToolBarAction(self) :
+      """  The action is only available, if ONE alarm is selected. """        
+      alarmlist = self.getSelectedAlarms()
       if (len(alarmlist) == 1) :
          self.setEnabled(True)
       else :
          self.setEnabled(False)
    
-   #Show the alarm's property
-   def PerformAction(self) :
-      alarm = GetSelectedAlarms()[0]
-      alarm.ShowProperties()
-   
-   #Action only valid if one, and only one alarm has been selected.
-   def ActionValid(self) :
+   def performAction(self) :
+      """ Show the alarm's property dialog """
+      alarm = self.getSelectedAlarms()[0]
+      dialog = getManager().createPropertyDialog(alarm)
+      #pop
+      raiseAndResetDialog(dialog)      
+
+  
+   def actionValid(self) :
+      """ Action only valid if one, and only one alarm has been selected. """      
       valid = True
-      num = len(GetSelectedAlarms())
+      num = len(self.getSelectedAlarms())
       if (num != 1) :
          valid = False
       return(valid)
    
-   #Text for menu item   
-   def GetText(self) :
-      text = "Properties: " + GetSelectedAlarm().GetName()
+   def getText(self) :
+      """ Text for menu item  """
+      text = "Properties: " + self.getSelectedAlarm().get_name()
       return(text)
+
+class OneShotAction(Action) :
+   def __init__(self,parent,text="One Shot Shelved",*args,**kwargs) :
+      self.icon = QtGui.QIcon("hourglass--arrow.png")
+      self.text = text
+      self.tip = "OneShot"
+      self.actionword = "OneShot Shelve"
+      super(OneShotAction,self).__init__(parent,*args,**args)
+      
+   
+   def performAction(self) :            
+      """ One Shot """
+      producer = JAWSProducer('active-alarms',getManager().type)
+      
+      alarmlist = self.getAlarmsToBeAcknowledged()
+      print("ALARMS:",alarmlist)
+      for alarm in alarmlist :
+         #self.acknowledgeAlarm(alarm.get_name(),producer)
+         producer.ack_message(alarm.get_name())
+
 
 #Acknowledge Action      
 class AckAction(Action) :
+   """ Acknowledge alarms """
+   
    def __init__(self,parent,text="Acknowledge Alarms",*args,**kwargs) :
-      
+      """ 
+         Create an instance
+         :param parent: parent widget
+         :type parent: QMenu or QToolbar
+         :param text: Text to be displayed on the parent
+         :type text: string (default = "Acknowledge Alarms")
+     
+      """
+   
       self.icon = QtGui.QIcon("tick-circle-frame.png")
       self.text = text
       self.tip = "Acknowledge"
@@ -223,42 +327,58 @@ class AckAction(Action) :
       self.actionword = "Ack"
       super(AckAction,self).__init__(parent,*args,**kwargs)
      
-   #Determine which selected alarms need to be acknowledged
-   def GetAlarmsToBeAcknowledged(self) :
-      alarmlist = GetSelectedAlarms()
+   
+   def getAlarmsToBeAcknowledged(self) :
+      """ Determine which selected alarms need to be acknowledged """
+      alarmlist = self.getSelectedAlarms()
       
       #Only those with a latch severity make the cut
       needsack = []
       for alarm in alarmlist :
-         if (alarm.GetLatchSevr() != None and
-            not "NO_ALARM" in alarm.GetLatchSevr()) :
+         if ("latched" in alarm.get_state(name=True).lower())  :
             needsack.append(alarm)
       return(needsack) 
    
-   #Action is only valid if there is at least one alarm that
-   #needs to be acknowledged
-   def ActionValid(self) :
+   
+   def actionValid(self) :
+      """ Action is only valid if there is at least one alarm that
+          needs to be acknowledged
+      """
       valid = False
-      needsack = self.GetAlarmsToBeAcknowledged()
+      needsack = self.getAlarmsToBeAcknowledged()
+      
       if (len(needsack) > 0) :
          valid = True
       return(valid)
    
-   #Configure the toolbar button as appropriate
-   def ConfigToolBarAction(self) :
-      alarmlist = self.GetAlarmsToBeAcknowledged()
+   def configToolBarAction(self) :
+      """ Configure the toolbar button as appropriate """
+      alarmlist = self.getAlarmsToBeAcknowledged()
       
       if (len(alarmlist) == 0) :
          self.setEnabled(False)
       else :
          self.setEnabled(True)
    
-   #Acknowledge the list of alarms  
-   def PerformAction(self) :      
-      alarmlist = self.GetAlarmsToBeAcknowledged()
+   def performAction(self) :            
+      """ Acknowledge the list of alarms """
+      producer = JAWSProducer('active-alarms',getManager().type)
+      
+      alarmlist = self.getAlarmsToBeAcknowledged()
+    
       for alarm in alarmlist :
-         alarm.AcknowledgeAlarm()
-
+         #self.acknowledgeAlarm(alarm.get_name(),producer)
+         producer.ack_message(alarm.get_name())
+   
+   def acknowledgeAlarm(self,alarmname,producer=None) :
+      if (producer == None) :
+         producer = JAWSProducer('active-alarms',getManager().type)
+         
+         ##### FOR TESTING PURPOSES ONLY Until active-alarms, alarm-state 
+      
+      producer.ack_message(alarmname)
+      
+   
 #UnShelve selected alarm/alarms      
 class UnShelveAction(Action) :
    def __init__(self,parent,*args,**kwargs) :
@@ -272,8 +392,8 @@ class UnShelveAction(Action) :
       super(UnShelveAction,self).__init__(parent,*args,**kwargs)
 
    #Configure the toolbar as appropriate
-   def ConfigToolBarAction(self) :
-      alarmlist = GetSelectedAlarms()
+   def configToolBarAction(self) :
+      alarmlist = self.getSelectedAlarms()
       
       if (len(alarmlist) == 0) :
          self.setEnabled(False)
@@ -282,8 +402,8 @@ class UnShelveAction(Action) :
    
  
    #Unshelve the selected alarms      
-   def PerformAction(self) :
-      alarmlist = GetSelectedAlarms() 
+   def performAction(self) :
+      alarmlist = self.getSelectedAlarms() 
       
       message = None
       if (len(alarmlist) == 0) :
@@ -296,49 +416,11 @@ class UnShelveAction(Action) :
          reply = msgBox.exec()
          return
       
-      confirm = ConfirmAlarms(alarmlist,"Unshelve")
+      confirm = confirmAlarms(alarmlist,"Unshelve")
       if (not confirm) :
          return
       
       for alarm in alarmlist :
          alarm.UnShelveRequest()
-
-#Get the single alarm that is selected.
-def GetSelectedAlarm() :
-   alarmlist = GetSelectedAlarms()
-
-   alarm = None
-   if (len(alarmlist) > 0) :
-      alarm = alarmlist[0]
-   return(alarm)
-        
-
-#Get the list of alarms that have been selected on the table
-def GetSelectedAlarms() :
-   alarmlist = []
-   
-   #Access both the proxy model and the sourcemodel
-   proxymodel = GetProxy() 
-   sourcemodel = GetModel()     
-   
-   #The indices returned are that of the proxymodel, which is what 
-   #the table LOOKS like. We need the source model index to identify the
-   #actual selected alarm.
-   indices = GetTable().selectedIndexes()
-   
-   for index in indices :
-      proxy_index = index
-      #convert the proxy_index into a source_index, 
-      #and find the row that is associated with the selected alarm(s)
-      source_row = proxymodel.mapToSource(proxy_index).row()
-      alarm = sourcemodel.data[source_row]         
-      alarmlist.append(alarm)
-   return(alarmlist)
-
-#If a row is selected, configure tool bar as appropriate.
-def RowSelected() :
-   GetManager().GetToolBar().Configure()
-      
-
 
 

@@ -7,15 +7,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from AlarmThread import *
 from ModelView import *
 from Filters import *
-from ShelvingDialog import *
 from PrefDialog import *
-
+from OverrideDialog import *
 from utils import *
-
-#NOTE ABOUT METHOD AND VARIABLE NAMES
-# --- self.myvariable     -- variable for this application
-# --- def MyMethod()      -- method implemented for this application
-# --- def libraryMethod() -- method accessed from a python library
 
 #Parse arguments
 parser = argparse.ArgumentParser()
@@ -32,28 +26,28 @@ class ToolBar(QtWidgets.QToolBar) :
       
       self.parent = parent      
       self.actionlist = []
-      self.AddActions()
+      self.addActions()
    
    #Add the common actions   
-   def AddActions(self) :
+   def addActions(self) :
       #Display user preferences
-      prefaction = PrefAction(self).AddAction()
+      prefaction = PrefAction(self).addAction()
       
       #Actions added to the actionlist are subject to configuration
-      propaction = PropertyAction(self).AddAction()
+      propaction = PropertyAction(self).addAction()
       self.actionlist.append(propaction)
       
-      removefilter = RemoveFilterAction(self).AddAction()
+      removefilter = RemoveFilterAction(self).addAction()
       self.removefilter = removefilter
    
    #Access to the Remove Filter action button
-   def GetRemoveFilterAction(self) :
+   def getRemoveFilterAction(self) :
       return(self.removefilter)
          
    #Configure the tool bar when necessary
-   def Configure(self) :
+   def configureToolBar(self) :
       for action in self.actionlist :               
-         action.ConfigToolBarAction()
+         action.configToolBarAction()
       
 
 #Only one widget for a main window
@@ -61,34 +55,35 @@ class JAWSManager(QtWidgets.QMainWindow) :
    def __init__(self,title,type,*args,**kwargs) :
       super(JAWSManager,self).__init__(*args,**kwargs)
       
-      SetManager(self)
-          
+      setManager(self)
+         
       #Instantiate Manager members
       self.type = type  #Manager type
       self.data = []    #alarm data
       self.filters = [] #available alarm filters
-      
-      self.shelfdialog = None   #dialog displaying suppression options
+   
+      self.consumers = []
+      self.overridedialog = None   #dialog displaying suppression options
       self.prefdialog = None    #dialog displaying preferences
       self.removefilter = None  #Removes all filters.Associated with the tool bar
       
-      self.managerprefs = self.ReadPrefs() #Read user preferences.
+      self.propdialogs = {}
+      self.managerprefs = self.readPrefs() #Read user preferences.
       
       #Begin to configure the main window     
       self.setWindowTitle(title)
-      
-      
+          
       #Create the pieces and parts of the modelview and tableview
-      self.CreateModelAndTable()
+      self.createModelAndTable()
       
-      self.toolbar = self.ToolBar()  
+      self.toolbar = self.createToolBar()  
       self.addToolBar(self.toolbar)
        
       #Put the table in the main widget's layout.
       #Need to have a layout for its size hint.
       layout = QtWidgets.QGridLayout()
       
-      menubar = self.MenuBar()
+      menubar = self.createMenuBar()
       layout.addWidget(menubar)      
       layout.addWidget(self.tableview)
      
@@ -116,28 +111,113 @@ class JAWSManager(QtWidgets.QMainWindow) :
       
       #Initial configuration based on prefs and alarm
       #status
-      self.InitConfig()
-     
-      #Initial processing of the Kafka messages
-      self.StartProcessor()   
-      self.SetSize()
+      self.initConfig()
       
-      #Start the worker thread to monitor for messages
-      self.StartWorker()
+      #Initialize
+      self.processor = self.createProcessor()
+      
+      #Start the worker threads to monitor for messages
+      self.startWorkers()
+      
+      #Initialize the size of the main gui
+      self.setSize()
+      
+   ### THE FOLLOWING METHODS DEAL WITH THREADING
+   
+   #Create and start the worker.
+   def startWorkers(self) :
+      
+      #Create a thread for each topic
+      topics = self.processor.get_topics()
+      
+      self.threadpool = QThreadPool()  
+      self.threadpool.setMaxThreadCount(len(topics) + 1)
+         
+      self.workerthreads = {}
+      for topic in topics :
+         worker = JAWSWorker(self.createConsumer,topic)
+         self.workerthreads[topic] = worker
+         worker.signals.progress.connect(self.updateAlarms)
+        
+         self.threadpool.start(worker)
+         self.workerthreads[topic] = worker
+         
+   
+   #Create a consumer for the topic  
+   def createConsumer(self,topic) :
+     
+      #The JAWSConsumer includes the event table, which will be
+      #the thread.
+      consumer = JAWSConsumer(topic,self.initMessages,
+         self.updateMessages,self.type)
+      
+      self.consumers.append(consumer)
+      #Start the consumer 
+      consumer.start()
+      
+   #Initial messages (this is in the jawsconsumer thread)
+   def initMessages(self,msglist) :      
+      
+      #Process each alarm 
+      for msg in msglist.values() :        
+         topic = get_msg_topic(msg)    
+         worker = self.workerthreads[topic]
+         worker.signals.progress.emit(msg)
+         
+   
+   #Called when there is a new message (jaws consumer thread)
+   def updateMessages(self,msg) :    
+      topic = get_msg_topic(msg)      
+      worker = self.workerthreads[topic]
+      worker.signals.progress.emit(msg)
+   
+   #Back to the main GUI thread.
+   ##### SOME OF THIS MAY BE PUSHED TO THE INHERITED MANAGER
+   def updateAlarms(self,msg) :      
+      alarm = self.processor.process_alarm(msg)
+      if (msg.topic() == "registered-alarms") :
+         self.configureOverrideDialog()
+      if (alarm != None) :
+         state = alarm.get_state(name=True)
+         
+         if (state != None) :
+            state = state.lower()
+            if (state == "active" or "latched" in state) :
+               getModel().addAlarm(alarm)
+            elif (re.search("normal",state) != None) :
+               getModel().removeAlarm(alarm)
+            elif (re.search("shelved",state) != None) :
+               getModel().removeAlarm(alarm)
+            else :
+               print(state, "NOT YET HANDLED")
+         else :
+            getModel().removeAlarm(alarm)
+           
+   
+   #Close the GUI gracefully (MainWindow function) 
+   #closeEvent != CloseEvent
+   def closeEvent(self, event=QtGui.QCloseEvent()) :
+      
+      #Close down the consumers nicely
+      if (self.consumers != None) :        
+         for consumer in self.consumers :        
+            consumer.stop()
+      sys.exit(0)
+   
    
    #Create the table, model, and proxymodel that will
    #display and organize the alarm data
-   def CreateModelAndTable(self) :
+   def createModelAndTable(self) :
    
       ##### Using a proxymodel allows us to easily sort and filter
-      proxymodel = self.ProxyModel()      
+      proxymodel = self.getProxyModel()      
       self.proxymodel = proxymodel
       
       #Create the TableView widget that will display model
-      self.tableview = self.TableView()
+      self.tableview = self.createTableView()
       
       #Create the alarmmodel that will be displayed in the table
-      self.modelview = self.ModelView()
+      self.modelview = self.createModelView()
       
       #Assign the model to the table
       self.tableview.setModel(proxymodel)
@@ -146,45 +226,57 @@ class JAWSManager(QtWidgets.QMainWindow) :
       #Have to connect AFTER model has been set in the tableview
       #If a row is selected, the tool bar configuration may change
       self.tableview.selectionModel().selectionChanged.connect(
-         RowSelected)
+         self.tableview.rowSelected)
       
       self.proxymodel.setSourceModel(self.modelview)
       
       #Make the model and the table available      
-      SetModel(self.modelview)
-      SetTable(self.tableview)
-      SetProxy(self.proxymodel)
+      setModel(self.modelview)
+      setTable(self.tableview)
+      setProxy(self.proxymodel)
    
    #Managers use the same proxymodel class
-   def ProxyModel(self) :
+   def getProxyModel(self) :
       proxymodel = ProxyModel()     
       return(proxymodel)
-
+   
+   def getProcessor(self) :
+      return(self.processor)
+      
    #Configure based on the initial set of messages
-   def InitConfig(self) :
-      self.ApplyPrefs()
-      self.ConfigureColumns()
-      self.ConfigureToolBar()
+   def initConfig(self) :
+      self.applyPrefs()
+      self.configureColumns()
+      self.configureToolBar()
    
    #Configure the column width.
    #Some columns have a width assigned  
-   def ConfigureColumns(self) :
-      GetModel().ConfigureColumns()
+   def configureColumns(self) :
+      getModel().configureColumns()
     
    #Configure the tool bar.   
-   def ConfigureToolBar(self) :
-      self.GetToolBar().Configure()
+   def configureToolBar(self) :
+      self.getToolBar().configureToolBar()
    
+   def configureProperties(self,alarm) :
+      if (alarm.get_name() in self.propdialogs) :
+         dialog = self.propdialogs[alarm.get_name()]
+         dialog.configureProperties()
+   
+   def configureOverrideDialog(self) :
+      if (self.overridedialog != None) :
+         self.overridedialog.reset()
+         
    #Access to the Manager's toolbar  
-   def GetToolBar(self) :
+   def getToolBar(self) :
       return(self.toolbar)
       
    #Access the RemoveFilter for configuration  
-   def GetRemoveFilterAction(self) :
-      return(self.GetToolBar().GetRemoveFilterAction())
+   def getRemoveFilterAction(self) :
+      return(self.getToolBar().getRemoveFilterAction())
    
    #Access the manager's set of filters.      
-   def GetFilters(self) :      
+   def getFilters(self) :      
       return(self.filters)
    
    
@@ -192,12 +284,12 @@ class JAWSManager(QtWidgets.QMainWindow) :
    #   user preferences.
    
    #Access this manager's preference configuration   
-   def GetPrefs(self) :
+   def getPrefs(self) :
       return(self.managerprefs)
 
    #Create the preference file name   
-   def GetPrefFile(self) :
-      user = GetUser()
+   def getPrefFile(self) :
+      user = getUser()
       manager = self.name
       filename = "." + user + "-jaws-" + manager
       return(filename)
@@ -205,9 +297,9 @@ class JAWSManager(QtWidgets.QMainWindow) :
    #Read preference file.
    #Preferences contain initial configuration information 
    #such as hidden/shown table columns
-   def ReadPrefs(self) :
+   def readPrefs(self) :
       prefs = {}
-      filename = self.GetPrefFile()
+      filename = self.getPrefFile()
       
       if (os.path.exists(filename)) :        
          #Preference file is written as a dictionary.
@@ -218,8 +310,8 @@ class JAWSManager(QtWidgets.QMainWindow) :
       return(prefs)
    
    #Save the user preferences.
-   def SavePrefs(self) :
-      filename = self.GetPrefFile()
+   def savePrefs(self) :
+      filename = self.getPrefFile()
       if (os.path.exists(filename)) :
          os.remove(filename)
       #Write the preference dictionary to the file.
@@ -229,99 +321,70 @@ class JAWSManager(QtWidgets.QMainWindow) :
       file.close()
    
    #Apply preferences if applicable
-   def ApplyPrefs(self) :
-      prefs = self.GetPrefs()
+   def applyPrefs(self) :
+      prefs = self.getPrefs()
       if (prefs == None) :
          return
       
       if ("display" in prefs) :
-         GetModel().ApplyChanges(prefs['display']['show'])
+         getModel().applyChanges(prefs['display']['show'])
          
       if ("sort" in prefs) :
          sortcolumn = prefs['sort']['column']
          sortorder = prefs['sort']['order']
       else :
-         (sortcolumn,sortorder) = GetTable().GetDefaultSort()
-      GetTable().sortByColumn(sortcolumn,sortorder)
+         (sortcolumn,sortorder) = getTable().GetDefaultSort()
+      getTable().sortByColumn(sortcolumn,sortorder)
    
    ### The following deal with the manager's filters.
    
    #Create the filters for the manager.
-   def MakeFilters(self) :
+   def makeFilters(self) :
       #Not all columns have filters. 
       columns = self.columns
       for col in columns :          
-         
          if ("filter" in columns[col]) :
             filtertype = columns[col]['filter']            
-            filter = filtertype()
-            
+            filter = filtertype()           
             self.filters.append(filter)
       
-      self.InitFilters()
+      self.initFilters()
   
    #Handler initial filter values (from prefs file) a little 
    #differently
-   def InitFilters(self) :
+   def initFilters(self) :
       
-      prefs = self.GetPrefs()      
+      prefs = self.getPrefs()      
       if (not 'filters' in prefs) :
          prefs['filters'] = {}
          
       #if (prefs != None and "filters" in prefs) :
       for filter in self.filters :
-         name = filter.GetName()
-         settings = filter.GetCurrentSettings()
+         name = filter.getName()
+         settings = filter.getCurrentSettings()
          if (name in prefs['filters']) :
             settings = prefs['filters'][name]
          
-         filter.SetSettings(settings)               
-         filter.SetHeader()
+         filter.setSettings(settings)               
+         filter.setHeader()
          
-
-   #Close the GUI gracefully (MainWindow function) 
-   #closeEvent != CloseEvent
-   def closeEvent(self, event=QtGui.QCloseEvent()) :
-      self.StopWorker()
-      sys.exit(0)
-
-        
-   #Create and start the worker.
-   def StartWorker(self) :
-      self.threadpool = QThreadPool()         
-      #The function that the worker will call
-      self.worker = Worker(self.processor.GetAlarms,0.5) 
-      
-      #Connect to the worker's emit signal, and call the GUI to 
-      #process the alarms
-      self.worker.signals.output.connect(self.ProcessAlarms)
-      self.threadpool.start(self.worker)
-   
-   #Process the alarms.
-   #This must be done from the MainWindow thread because the GUI
-   #will be updated.
-   def ProcessAlarms(self,msg) :
-     if (msg != None and not msg.error()) :                
-         self.processor.ProcessAlarms(msg)
-   
-   #Stop the worker from running. 
-   def StopWorker(self) :
-      self.worker.Stop()
-   
    #Create the preference dialog
-   def PrefDialog(self) :
-      prefdialog = PrefDialog()
-      return(prefdialog)
+   def createPrefDialog(self) :
+      if (self.prefdialog == None) :
+         self.prefdialog = PrefDialog()
+      return(self.prefdialog)
    
-   def GetPrefDialog(self) :
+   #Access the preference dialog
+   def getPrefDialog(self) :
       return(self.prefdialog)
         
-   #Create a dialog for shelving an alarm. Common to children
-   def ShelfDialog(self) :
-      shelfdialog = ShelfDialog()
-      return(shelfdialog)   
+   #Create a dialog for overriding an alarm. Common to children
+   def createOverrideDialog(self) :
+      if (self.overridedialog == None) :
+         self.overridedialog = OverrideDialog()
+      return(self.overridedialog)   
 
    #Adjust the size of the main gui when alarms are added/removed
-   def SetSize(self) :
+   def setSize(self) :
       self.widget.adjustSize()
       self.adjustSize() 

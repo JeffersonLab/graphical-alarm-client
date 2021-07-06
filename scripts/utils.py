@@ -8,21 +8,15 @@ import pytz
 import time
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QIcon, QPixmap, QImage, QFont, QColor
+from jlab_jaws.avro.subject_schemas.entities import *
 
-from KafkaConnection import *
-
-#NOTE ABOUT METHOD AND VARIABLE NAMES
-# --- self.myvariable     -- variable for this application
-# --- def MyMethod()      -- method implemented for this application
-# --- def libraryMethod() -- method accessed from a python library
-
+#from jlab_jaws_helper import JAWSConnection
 
 DEPLOY = "ops"
 
 TEST = False
 MANAGER = None
 
-CONSUMER = None
 PROCESSOR = None
 
 ACTIVEPANE = None
@@ -36,6 +30,11 @@ ACTIVEALARMS = {}
 SHELVEDALARMS = {}
 PRODUCERS = {}
 
+PROPERTIES = {}
+   
+
+ALARMS = {}
+
 BIGBOLD = "-*-helvetica-medium-r-bold-*-16-*-*-*-*-*-*-*"
 SMALLBOLD =  "-*-helvetica-medium-r-bold-*-12-*-*-*-*-*-*-*"
 SMALL = "-*-helvetica-medium-r-medium-*-12-*-*-*-*-*-*-*"
@@ -47,8 +46,8 @@ ALARMSTATUS = {
       "rank" : 3, "color" : 'red',    "image" : None, "shelved" : None},
    "MINOR"     : {
       "rank" : 1 , "color" : 'yellow', "image" : None, "shelved" : None},
-   "ALARMING"  : {
-      "rank" : 2, "color" : 'orange', "image" : None, "shelved" : None},
+   "ALARM"  : {
+      "rank" : 2, "color" : 'red', "image" : None, "shelved" : None},
    "ACK"       : {
       "rank" : 2 ,"color" : 'white' , "image" : None} ,
    "NO_ALARM"  : {
@@ -57,7 +56,7 @@ ALARMSTATUS = {
 
 SOURCEDIR = "./"
  
-def GetUser() :
+def getUser() :
    return(getpass.getuser())
 
 ####
@@ -83,11 +82,6 @@ def MakeLabel(text,bold=True) :
    if (bold) :
       MakeBold(label)
    return(label)
-  
-def RaiseDialog(dialog) :
-   dialog.show()
-   dialog.activateWindow()
-   dialog.raise_()
 
 def FormatTime(timestamp) :
    formatted = None
@@ -96,10 +90,10 @@ def FormatTime(timestamp) :
    
    return(formatted)
  
-def ConfirmAlarms(alarmlist,which="Shelve") :
+def confirmAlarms(alarmlist,which="Shelve") :
    alarmnames = []
    for alarm in alarmlist :
-      alarmname = alarm.GetName()
+      alarmname = alarm.get_name()
       alarmnames.append(alarmname)
    
    
@@ -117,13 +111,6 @@ def ConfirmAlarms(alarmlist,which="Shelve") :
          
    return(confirm)
       
-   
-#def SetProcessor(processor) :
- #  global PROCESSOR
-  # PROCESSOR = processor
-   
-#def GetProcessor() :
- #  return(PROCESSOR)
    
 def GetAlarmType(msgtype) :
    
@@ -150,7 +137,7 @@ def ConvertTimeStamp(seconds) :
 
 #Little utility so that it's not necessary to keep track
 #of the rows in case more/less are needed.
-def NextRow(widget) :
+def nextRow(widget) :
    row = widget.row
    if (row != None) :
       row = row + 1
@@ -159,15 +146,22 @@ def NextRow(widget) :
    widget.row = row
    return(row)
 
+def raiseAndResetDialog(dialog) :
+   print("DIALOG:",dialog)
+   
+   dialog.show()
+   dialog.activateWindow()
+   dialog.raise_()
+   dialog.reset()
 
 
 def GetStatusImage(status) :
    
    status = TranslateACK(status)
-  
+   
    image = None
    color = GetStatusColor(status)
-  
+   
    if (color != None) :
       if (ALARMSTATUS[status]['image'] == None) :
          filename = IMAGEPATH + color + "-big.png"
@@ -180,22 +174,22 @@ def GetStatusImage(status) :
    return(image)
 
  
-def SetProxy(proxy) :
+def setProxy(proxy) :
    global PROXY
    PROXY = proxy
 
-def GetProxy() :
+def getProxy() :
    return(PROXY)
         
-def SetModel(model) :
+def setModel(model) :
    global MODEL
    MODEL = model
 
-def GetModel() :
+def getModel() :
    return(MODEL)
 
 def TranslateACK(status) :
-   
+   return(status)
    ack = status
    if (status != None) :
       match = re.search("(.*)_ACK",status)
@@ -224,52 +218,24 @@ def SetConsumer(consumer) :
    global CONSUMER
    CONSUMER = consumer
 
-def GetConsumer() :
-   if (CONSUMER == None) :
-      
-      SetConsumer(KafkaConsumer())
-   return(CONSUMER)
    
 def SetProducer(producer,topic) :
    global PRODUCERS
    PRODUCERS[topic] = producer
 
 def GetProducer(topic) :
-   
-   if (not topic in PRODUCERS) :
-      producer = KafkaProducer(topic)
-      SetProducer(producer,topic)
-   return(PRODUCERS[topic])
+   producer = None
+   if (topic in PRODUCERS) :
+      producer = PRODUCERS[topic]
+      
+   return(producer)
    
 
 #Add and access registered alarms  
 
-#Looks in all alarm lists and returns if found 
-def FindAlarm(alarmname) :
-  
-   #Look at the registered alarms. 
-   found = FindRegAlarm(alarmname)
-   
-   #Look in active alarms 
-   if (alarmname in ACTIVEALARMS) :
-      found = FindActiveAlarm(alarmname)
-      
-   elif (alarmname in SHELVEDALARMS) :
-      found = SHELVEDALARMS[alarmname]
-   
-   return(found)
-
-def AddRegAlarm(alarm) :
-   REGISTEREDALARMS[alarm.GetName()] = alarm
-   
-def FindRegAlarm(alarmname) :  
-   found = None
-   if (alarmname in REGISTEREDALARMS) :
-      found = REGISTEREDALARMS[alarmname] 
-   return(found)
 
 def AddShelvedAlarm(alarm) :
-   SHELVEDALARMS[alarm.GetName()] = alarm
+   SHELVEDALARMS[alarm.get_name()] = alarm
    
 def FindShelvedAlarm(alarmname) :
    found = None
@@ -280,7 +246,7 @@ def FindShelvedAlarm(alarmname) :
 #Add and access active alarms
 def AddActiveAlarm(alarm) :
    
-   ACTIVEALARMS[alarm.GetName()] = alarm
+   ACTIVEALARMS[alarm.get_name()] = alarm
 
 
      
@@ -314,8 +280,14 @@ def SetAlarmList(alarmlist) :
    global ALARMLIST
    ALARMLIST = alarmlist
 
+def getAlarmNames() :
+   names = []
+   for alarm in getModel().data :
+      names.append(alarm.get_name())
+   return(names)
+   
 def GetAlarmList() :
-   return(GetModel().data)
+   return(getModel().data)
    
 def SetShelvedList(shelvedlist) :
    global SHELVEDLIST
@@ -349,22 +321,22 @@ def SetTest(test) :
 def GetTest() :
    return(TEST)
 
-def SetManager(manager) :
+def setManager(manager) :
    global MANAGER
    MANAGER = manager
 
 #Access to the main gui
-def GetManager() :
+def getManager() :
    return(MANAGER)   
 
 def WhichManager() :
    return(MANAGER.manager)
    
-def SetTable(table) :
+def setTable(table) :
    global TABLE
    TABLE = table
 
-def GetTable() :
+def getTable() :
    return(TABLE)
 
 

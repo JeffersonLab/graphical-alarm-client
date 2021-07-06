@@ -44,7 +44,7 @@ class PrefDialog(QtWidgets.QDialog) :
       self.prefwidgets.append(displayprefs)
 
       #The "apply" and "close" buttons.
-      buttons = self.MakeButtons()
+      buttons = self.makeButtons()
       vlayout.addWidget(buttons)
       
       self.setLayout(vlayout)
@@ -52,24 +52,24 @@ class PrefDialog(QtWidgets.QDialog) :
       self.show()
    
    #Configure prefwidgets (if defined) 
-   def Configure(self) :
+   def configureDialog(self) :
       for prefwidget in self.prefwidgets :
-         prefwidget.Configure()
+         prefwidget.configureDialog()
       
    #Called to reset preferences
-   def Reset(self) :
+   def reset(self) :
       for pref in self.prefwidgets :
-         pref.Reset()      
+         pref.reset()      
    
    #The accessible buttons on the dialog
-   def MakeButtons(self) :
+   def makeButtons(self) :
       
       layout = QtWidgets.QHBoxLayout()
       widget = QtWidgets.QWidget()
       widget.setLayout(layout)
       
       acceptbutton = QtWidgets.QPushButton("Accept Changes")
-      acceptbutton.clicked.connect(self.ApplyChanges)
+      acceptbutton.clicked.connect(self.applyChanges)
       layout.addWidget(acceptbutton) 
       
       cancelbutton = QtWidgets.QPushButton("Close")
@@ -78,17 +78,17 @@ class PrefDialog(QtWidgets.QDialog) :
       return(widget)
    
    #Apply changes for each applicable section
-   def ApplyChanges(self) :            
+   def applyChanges(self) :            
       
       #Does the user also want to save the changes?
       save = self.SaveChanges()      
       for pref in self.prefwidgets :
          if (save) :
             pref.SaveChanges()
-         pref.ApplyChanges()
+         pref.applyChanges()
       
       if (save) :
-         GetManager().SavePrefs()
+         getManager().savePrefs()
          
    #Ask if the user wants to save the changes
    def SaveChanges(self) :
@@ -113,7 +113,7 @@ class PrefDialog(QtWidgets.QDialog) :
 #A button that displays the filter menu.
 class FilterButton(QtWidgets.QPushButton) :
    def __init__(self,filter,parent,*args,**kwargs) :
-      super(FilterButton,self).__init__(filter.GetName(),parent) 
+      super(FilterButton,self).__init__(filter.getName(),parent) 
       
       self.filter = filter
       self.parent = parent
@@ -124,7 +124,7 @@ class FilterButton(QtWidgets.QPushButton) :
          lambda checked : self.ShowFilterMenu(checked,filter))
       
       self.icon = QtGui.QIcon("funnel--plus.png")
-      self.Configure()
+      self.configureDialog()
       
    #Create a filternmenu and display it.
    def ShowFilterMenu(self,checked,filter) :
@@ -133,9 +133,9 @@ class FilterButton(QtWidgets.QPushButton) :
       menu.exec_(self.mapToGlobal(self.parent.pos()))
    
    #If filter is applied, the filter button will have the filter icon
-   def Configure(self) :
+   def configureDialog(self) :
       filter = self.filter      
-      filtered = filter.IsFiltered()
+      filtered = filter.isFiltered()
       
       if (filtered) :
          self.setIcon(self.icon)
@@ -160,7 +160,7 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       vlayout.addWidget(filterwidget)
       self.filterwidget = filterwidget
       
-      self.filteraction = GetManager().GetRemoveFilterAction()
+      self.filteraction = getManager().getRemoveFilterAction()
       
       #Use the filteraction's icon
       icon = self.filteraction.icon
@@ -172,21 +172,21 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       self.layout.addWidget(self.removebutton)
       
       #Configure the remove and filter buttons
-      self.Configure()
+      self.configureDialog()
    
    #Enable/disable the removebutton, and add/remove icon for each
    #filter button   
-   def Configure(self) :
-      filtered = self.filteraction.GetFilterState()
+   def configureDialog(self) :
+      filtered = self.filteraction.getFilterState()
       
       self.removebutton.setEnabled(filtered)
       for button in self.filterbuttons :
-         button.Configure()
+         button.configureDialog()
       
    #Called by the Remove Filters button  
    def RemoveFilters(self) :
       filteraction = self.filteraction   
-      filteraction.RemoveAllFilters()
+      filteraction.removeAllFilters()
    
    #Add a button for each available filter
    def AddFilterWidgets(self) :
@@ -218,7 +218,7 @@ class FilterPrefs(QtWidgets.QGroupBox) :
    def SortFilters(self) :
       sorted = []
       #Get the header text in visible order
-      visualorder = GetModel().VisibleColumnOrder() 
+      visualorder = getModel().VisibleColumnOrder() 
       
       #Add the filter for each header to the sorted list
       for header in visualorder :
@@ -229,20 +229,20 @@ class FilterPrefs(QtWidgets.QGroupBox) :
    
    #Save the user's preferences to their pref file.
    def SaveChanges(self) :
-      prefs = GetManager().GetPrefs()
+      prefs = getManager().getPrefs()
       if (not 'filters' in prefs) :
          prefs['filters'] = {}
          
-      for filter in GetManager().GetFilters() :
-         filtername = filter.GetName()
+      for filter in getManager().getFilters() :
+         filtername = filter.getName()
          prefs['filters'][filtername] = filter.SaveFilter()
     
    #Don't need this method since changes are applied immediately.
-   def ApplyChanges(self) :
+   def applyChanges(self) :
       pass
    
    #Called when the dialog has been RE-opened.
-   def Reset(self) :
+   def reset(self) :
       #Remove the filter buttons
       self.RemoveFilterWidgets()
       #Add them back in visible column order
@@ -252,14 +252,14 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       #Replace the removebutton
       self.layout.addWidget(self.removebutton)
       #Configure all of the buttons
-      self.Configure()
+      self.configureDialog()
 
 #Section of prefdialog dealing with sorting preferences.      
 class SortPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent,*args,**kwargs) :
       super(SortPrefs,self).__init__("Default Sort",parent)
       
-      self.prefs = GetManager().GetPrefs()
+      self.prefs = getManager().getPrefs()
       layout = QtWidgets.QHBoxLayout()
       self.setLayout(layout)
       
@@ -302,8 +302,8 @@ class SortPrefs(QtWidgets.QGroupBox) :
       
       #Fill the combo box with the header options
       self.FillCombo()
-      self.Configure()
-      self.combo.currentIndexChanged.connect(self.ApplyChanges)
+      self.configureDialog()
+      self.combo.currentIndexChanged.connect(self.applyChanges)
    
    #Fill the combo with the sortoptions         
    def FillCombo(self) :
@@ -314,7 +314,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
       combo.clear()
       
       #Get the headers (in visible order)
-      options = GetModel().VisibleColumnOrder()
+      options = getModel().VisibleColumnOrder()
      
       #Add the current sort column as the combo box value    
       header = self.CurrentSortOption()
@@ -325,12 +325,12 @@ class SortPrefs(QtWidgets.QGroupBox) :
          combo.addItem(option) 
 
    #Configure the section
-   def Configure(self) :
+   def configureDialog(self) :
       #What is the column currently being used to sort?        
-      currentsort = GetProxy().sortColumn()
+      currentsort = getProxy().sortColumn()
       
       #Ascending or descending? 
-      currentorder = GetProxy().sortOrder()
+      currentorder = getProxy().sortOrder()
       self.sort = currentorder
       if (currentorder == 1) :
          self.sortdescending.setChecked(True)
@@ -339,30 +339,30 @@ class SortPrefs(QtWidgets.QGroupBox) :
   
    #Which header is currently being used to sort?
    def CurrentSortOption(self) :
-      sortcolumn = GetProxy().sortColumn()
+      sortcolumn = getProxy().sortColumn()
       
       #return the header text for the column
-      sortoption = GetModel().headerData(sortcolumn,Qt.Horizontal,Qt.DisplayRole)      
+      sortoption = getModel().headerData(sortcolumn,Qt.Horizontal,Qt.DisplayRole)      
       return(sortoption)
    
 
    #Get the column number that is being used to sort.
    def GetSortColumn(self) :
       sortby = self.combo.currentText().lower()    
-      sortcolumn = GetModel().GetColumnIndex(sortby)    
+      sortcolumn = getModel().GetColumnIndex(sortby)    
       return(sortcolumn)  
 
    #Add this preference widget's properties to the 
    #managerprefs to be saved
    def SaveChanges(self) :
-      prefs = GetManager().GetPrefs()
+      prefs = getManager().getPrefs()
       
       prefs['sort'] = {}
       prefs['sort']['column'] = self.GetSortColumn()
       prefs['sort']['order'] = self.sort
     
    #Called when user selects a sort column from the combo box
-   def ApplyChanges(self) :
+   def applyChanges(self) :
       #Column number
       sortcolumn = self.GetSortColumn()
       #Sort order
@@ -370,7 +370,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
       
       #Request table to sort by column
       if (sortcolumn != None and sortorder != None) :
-         GetTable().sortByColumn(sortcolumn,sortorder)
+         getTable().sortByColumn(sortcolumn,sortorder)
       
 
    #Called when the user selects a sort order radiobutton
@@ -380,15 +380,15 @@ class SortPrefs(QtWidgets.QGroupBox) :
       if (button == self.sortdescending) :
          sort = 1
       self.sort = sort      
-      self.ApplyChanges()
+      self.applyChanges()
    
 
    #All preferences sections have a Reset method.
    #For the "Sort Preferencses" section, we want to fill up the 
    #combo list in the same order as the columns
-   def Reset(self) :      
+   def reset(self) :      
       self.FillCombo()
-      self.Configure()
+      self.configureDialog()
       
 
 #The widget from which the user can decide which columns to display
@@ -400,7 +400,7 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
       #Using a gridlayout, so will keep track of the rows.
       self.row = None
       self.showlist = []
-      self.prefs = GetManager().GetPrefs()
+      self.prefs = getManager().getPrefs()
       
       self.parent = parent 
       
@@ -427,7 +427,7 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
    #All preferences sections have a Reset method.
    #For the "Display Columns" section, we want to fill up the 
    #Show List Widget in the same order as the columns
-   def Reset(self) :
+   def reset(self) :
       self.FillDisplayBoxes()
    
    #Fill the Show/Hide display boxes with the appropriate columns
@@ -456,11 +456,11 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
    def GetDisplayOptions(self) :
       
       #The horizontal header for our table model
-      horizheader = GetTable().horizontalHeader()
+      horizheader = getTable().horizontalHeader()
       
       showlist = []
       hidelist = []
-      for col in range(GetModel().columnCount(0)) :        
+      for col in range(getModel().columnCount(0)) :        
          
          #The "visualindex" is the column index that the user 
          #is actually seeing. We want to move the visual index
@@ -468,10 +468,10 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
          visualindex = horizheader.visualIndex(col)
          
          #Get the header text for this column
-         header = GetModel().headerData(col,Qt.Horizontal,Qt.DisplayRole)
+         header = getModel().headerData(col,Qt.Horizontal,Qt.DisplayRole)
          #if the section is NOT hidden, add it to the showlist.
          #if hidden, add it to the hidelist
-         if (not GetTable().horizontalHeader().isSectionHidden(col)) :
+         if (not getTable().horizontalHeader().isSectionHidden(col)) :
             showlist.insert(visualindex,header.lower())
          else :
             hidelist.insert(visualindex,header.lower())
@@ -482,7 +482,7 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
       
    #This a row with a label (Show/Hide) and an associated listbox
    def DisplayOptions(self,text) :      
-      row = NextRow(self)
+      row = nextRow(self)
       
       #The label, in column 0
       label = QtWidgets.QLabel(text)
@@ -511,20 +511,20 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
    #managerprefs to be saved
    def SaveChanges(self) :
       #Which properties to show, and which to hide.
-      prefs = GetManager().GetPrefs()
+      prefs = getManager().getPrefs()
       prefs['display'] = {}
       prefs['display']['show'] = self.GetDisplayList("show")
       prefs['display']['hide'] = self.GetDisplayList("hide")
       
    #Called when the "Apply" button on the preferences dialog 
    #is pushed.
-   def ApplyChanges(self) :
+   def applyChanges(self) :
       #Which properties to show, and which to hide.
       hidelist = self.GetDisplayList("hide")
       showlist = self.GetDisplayList("show")
-      GetModel().ApplyChanges(showlist)
+      getModel().applyChanges(showlist)
  
-   def Configure(self) :
+   def configureDialog(self) :
       pass
       
 #The drag/drop listwidget.       
@@ -553,7 +553,7 @@ class DragWidget(QtWidgets.QListWidget) :
       #Spacing between items
       #self.setSpacing(2)
       
-      self.setSpacing(GetManager().PrefSpacing())
+      self.setSpacing(getManager().prefSpacing())
       #fix the height or the listwidgets are too tall.
       self.setFixedHeight(50)
       
@@ -563,7 +563,7 @@ class DragWidget(QtWidgets.QListWidget) :
    def sizeHint(self) :
       num = self.count()
       #extra = num * 20
-      extra = num * GetManager().PrefMultiplier()
+      extra = num * getManager().prefMultiplier()
       size = QtCore.QSize()
       height =1 
      

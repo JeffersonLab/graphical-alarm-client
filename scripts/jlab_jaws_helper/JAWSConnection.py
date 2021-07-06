@@ -1,18 +1,39 @@
+""" 
+.. module:: JAWSConnection
+   :synopsis : Create JAWS kafka producers and consumers
+   :notes : This module simplifies interaction with Kafka
+.. moduleauthor::Michele Joyce <erb@jlab.org>
+"""
+
 import os
 import pwd
 import types
 import pytz
 import time
-#import json
-from datetime import datetime
 
+from datetime import datetime
 
 # We can't use AvroProducer since it doesn't support string keys, see: https://github.com/confluentinc/confluent-kafka-python/issues/428
 
-#  COMMON
+#  COMMON/GENERAL
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from jlab_jaws.avro.subject_schemas.serde import ActiveAlarmSerde, \
-   AlarmStateSerde, OverriddenAlarmValueSerde, RegisteredAlarmSerde
+   AlarmStateSerde, OverriddenAlarmValueSerde, RegisteredAlarmSerde, \
+   OverriddenAlarmKeySerde
+
+#  REGISTERED ALARMS
+from jlab_jaws.avro.subject_schemas.entities import RegisteredAlarm, \
+   RegisteredClass, RegisteredClassKey, SimpleProducer, EPICSProducer, \
+   CALCProducer,AlarmStateEnum,AlarmStateValue,ShelvedAlarmReason
+
+from jlab_jaws.avro.referenced_schemas.entities import AlarmClass, \
+   AlarmLocation, AlarmCategory, AlarmPriority   
+
+# OVERRIDDEN ALARMS
+from jlab_jaws.avro.subject_schemas.entities import OverriddenAlarmValue, \
+   LatchedAlarm, FilteredAlarm, MaskedAlarm, DisabledAlarm, OnDelayedAlarm,\
+   OffDelayedAlarm, ShelvedAlarm, OverriddenAlarmKey, OverriddenAlarmType, \
+   ShelvedAlarmReason
 
 #  PRODUCER
 from confluent_kafka import SerializingProducer
@@ -23,15 +44,14 @@ from confluent_kafka.serialization import StringDeserializer
 from jlab_jaws.eventsource.table import EventSourceTable
 
 
+
 def convert_timestamp(seconds) :
    """ Convert the message timestamp to local timezone.
        
        :param seconds : number of seconds
        :type seconds : int
-       :returns date string for local timezone
-      
+       :returns date string for local timezone      
    """     
-
    #Work in utc time, then convert to local time zone.    
    ts = datetime.fromtimestamp(seconds//1000)
    utc_ts = pytz.utc.localize(ts)
@@ -47,21 +67,17 @@ def get_msg_timestamp(msg) :
        :param msg : topic messge
        :type msg: 'cimpl.Message'
        :returns timestamp in local time zone
-      
    """        
    #timestamp from Kafka is in UTC
    timestamp = msg.timestamp()
-   
    return(convert_timestamp(timestamp[1]))
 
- 
 def get_headers(msg) :
    """ Get message headers
        
        :param msg : topic messge
        :type msg: 'cimpl.Message'
        :returns list of headers
-      
    """           
    headers = msg.headers()
    return(headers)  
@@ -71,8 +87,7 @@ def get_msg_key(msg) :
        
        :param msg : topic messge
        :type msg: 'cimpl.Message'
-       :returns key 
-      
+       :returns key       
    """           
    return(msg.key())
  
@@ -81,8 +96,7 @@ def get_msg_value(msg) :
        
        :param msg : topic messge
        :type msg: 'cimpl.Message'
-       :returns value object
-      
+       :returns value object      
    """           
    return(msg.value())
 
@@ -91,12 +105,42 @@ def get_msg_topic(msg) :
        
        :param msg : topic messge
        :type msg: 'cimpl.Message'
-       :returns topic
-      
+       :returns topic     
    """           
    return(msg.topic())   
 
-class KafkaConnection(object) :
+def get_alarm_class_list() :
+   """ Get list of valid alarm class names 
+       
+       :returns list AlarmClass member names
+   """  
+   return(AlarmClass._member_names_)
+   
+def get_location_list() :
+   """ Get list of valid locations
+       
+       :returns list AlarmLocation member names       
+   """     
+   return(AlarmLocation._member_names_)
+   
+def get_category_list() :
+   """ Get list of valid categories
+       
+       :returns list AlarmCategory member names
+   """    
+   return(AlarmCategory._member_names_)
+
+def get_priority_list() :
+   """ Get list of valid priorities
+       
+       :returns list AlarmPriority member names
+   """     
+   return(AlarmPriority._member_names_)
+
+def get_override_reasons() :
+   return(ShelvedAlarmReason._member_names_)
+   
+class JAWSConnection(object) :
    """ This class sets up the kafka connection for creating consumers and
        producers
    """
@@ -107,28 +151,7 @@ class KafkaConnection(object) :
        :type topic: string
       
       """           
-
       self.topic = topic
-      
-      #Initialize connections 
-      self.avro_serdes = {
-         'registered-alarms' : {
-            'serde' : RegisteredAlarmSerde,
-            'deserializer' : None,
-            'serializer'   : None
-         },
-         'active-alarms'     : {
-            'serde' : ActiveAlarmSerde,
-            'deserializer' : None,
-            'serializer'   : None
-         },
-         'alarm-state' : {
-            'serde' : AlarmStateSerde,
-            'deserializer' : None,
-            'serializer'   : None
-         }
-        # 'overridden-alarms' : OverriddenAlarmSerde
-      }
       
       #Magic Kafka configuration
       bootstrap_servers = os.environ.get('BOOTSTRAP_SERVERS', 'localhost:9092')
@@ -140,24 +163,56 @@ class KafkaConnection(object) :
       
       self.key_deserializer = StringDeserializer('utf_8')
       self.key_serializer = StringSerializer()
+
+      #Initialize connections 
+      self.avro_serdes = {
+         'registered-alarms' : {
+            'serde' : RegisteredAlarmSerde,
+            'key_deserializer' : StringDeserializer('utf_8'),
+            'value_deserializer' : \
+               RegisteredAlarmSerde.deserializer(self.schema_registry),
+            'serializer'   : None
+         },
+         'active-alarms'     : {
+            'serde' : ActiveAlarmSerde,
+            'key_deserializer' : None,
+            'value_deserializer' :  \
+               AlarmStateSerde.deserializer(self.schema_registry),
+            'serializer'   : None
+         },
+         'alarm-state' : {
+            'serde' : AlarmStateSerde,
+            'key_deserializer' : None,
+            'value_deserializer' : \
+               AlarmStateSerde.deserializer(self.schema_registry),
+            'serializer'   : None
+         },
+         'overridden-alarms' : {
+            
+            'key_deserializer' : \
+               OverriddenAlarmKeySerde.deserializer(self.schema_registry),
+            'value_deserializer' : \
+               OverriddenAlarmValueSerde.deserializer(self.schema_registry)
+         }
+      }
+      
          
 
 
-class KafkaProducer(KafkaConnection) :
-   """ KafkaConnection that PRODUCES and sends messages 
+class JAWSProducer(JAWSConnection) :
+   """ JAWSConnection that PRODUCES and sends messages 
        
    """
    #NOTE: Most of this has been stolen from Ryan's examples
    def __init__(self,topic,name) :
-      """ Create a KafkaProducer instance
+      """ Create a JAWSProducer instance
           
           :param topic: Name of topic
           :type topic: string
           :param name: name of producer
           :type name: string
-
       """
-      super(KafkaProducer,self).__init__(topic)
+      super(JAWSProducer,self).__init__(topic)
       
       topic = self.topic
             
@@ -181,6 +236,23 @@ class KafkaProducer(KafkaConnection) :
          ('producer',name),('host',os.uname().nodename)]
 
    
+   def send_message(self,params) :
+      """ Send a message to a topic 
+          :param params: message content
+          :type params: types.SimpleNamespace()
+          
+          params must include:
+            params.key (name of alarm)
+            params.topic (topic to send message)
+            params.value
+            
+      """
+      
+      producer = self.producer 
+      producer.produce(topic=params.topic,value=params.value,key=params.key,
+         headers=self.hdrs,on_delivery=self.delivery_report)
+      producer.flush()
+   
    #Create an acknowledge message
    def ack_message(self,name) :
       """ Create an acknowledgement message
@@ -193,16 +265,20 @@ class KafkaProducer(KafkaConnection) :
       params = self.params
       params.value = None
       params.key = name
+      params.topic = self.topic
       
-      topic = self.topic
-      producer = self.producer
+      ### FOR TESTING PURPOSES ###
+      ### Until active-alarms/alarm-state/latching works
+      #params.value = AlarmStateValue(AlarmStateEnum['Active'])
+      #print("VAL",params.value)
+      #return
+      #params.topic = "alarm-state"
       
-      producer.produce(topic=topic, value=params.value, key=params.key, 
-         headers=self.hdrs, on_delivery=self.delivery_report)
-      producer.flush()
+      self.send_message(params)
 
    #Report success or errors
    def delivery_report(self,err, msg):
+      
     """ Called once for each message produced to indicate delivery result.
         Triggered by poll() or flush(). """
     if err is not None:
@@ -210,17 +286,17 @@ class KafkaProducer(KafkaConnection) :
     else:
         print('Message delivered')
    
+
+   
       
-      
-      
-class KafkaConsumer(KafkaConnection) :
-   """ KafkaConnection that subscribes to topics and consumes messages 
+class JAWSConsumer(JAWSConnection) :
+   """ JAWSConnection that subscribes to topics and consumes messages 
    """
    
    def __init__(self,topic,init_state,update_state,name,
       monitor=True) :
       
-      """ Create a KafkaConsumer instance
+      """ Create a JAWSConsumer instance
           
           :param topic: Name of topic
           :type topic: string
@@ -232,21 +308,25 @@ class KafkaConsumer(KafkaConnection) :
           :type name: string
           :param monitor : Continue monitoring
           :type monitor: boolean
-
       """
             
-      super(KafkaConsumer,self).__init__(topic)
+      super(JAWSConsumer,self).__init__(topic)
       
       self.name = name
       
       topic_config = self.avro_serdes[topic]
-      avro_serde = topic_config['serde']
+      #avro_serde = topic_config['serde']
       
-      if (topic_config['deserializer'] == None) :
-         topic_config['deserializer'] = \
+      if (topic_config['key_deserializer'] == None) :
+         topic_config['key_deserializer'] = self.key_deserializer 
+         
+         
+      if (topic_config['value_deserializer'] == None) :
+         topic_config['value_deserializer'] = \
             avro_serde.deserializer(self.schema_registry)
       
-      self.value_deserializer = topic_config['deserializer']
+      self.key_deserializer = topic_config['key_deserializer']
+      self.value_deserializer = topic_config['value_deserializer']
       
       ts = time.time()
       consumer_config = {'topic': topic,
@@ -264,7 +344,7 @@ class KafkaConsumer(KafkaConnection) :
    def start(self) :
       """ Start the event_table monitoring
       """
-                
+      
       self.event_table.start()
                 
    def stop(self) :
@@ -272,4 +352,3 @@ class KafkaConsumer(KafkaConnection) :
       """
       self.event_table.stop()
       
-                  

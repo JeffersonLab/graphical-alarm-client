@@ -1,19 +1,15 @@
-#NOTE ABOUT METHOD AND VARIABLE NAMES
-# --- self.myvariable     -- variable for this application
-# --- def MyMethod()      -- method implemented for this application
-# --- def libraryMethod() -- method accessed from a python library
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
-
+from jlab_jaws_helper.JAWSConnection import *
 from ModelView import *
 
 def GetFilterByName(name) :
    result = None
-   filters = GetManager().GetFilters()
+   filters = getManager().getFilters()
    for filter in filters :
-      if (filter.GetName() == name) :
+      if (filter.getName() == name) :
          return(filter)
    return(result)
    
@@ -56,15 +52,15 @@ class Filter(object) :
       return(settings)
    
    #Access to the filter name
-   def GetName(self) :
+   def getName(self) :
       return(self.filtername)
    
    #Access the filter state
-   def IsFiltered(self) :
+   def isFiltered(self) :
       return(self.filtered)
 
    #Set the filter state  
-   def SetFiltered(self) :
+   def setFiltered(self) :
       #If one option is filtered out, the filter is "filtered"
       filtered = False
       if (not self.settings == None and len(self.settings) > 0) :
@@ -76,13 +72,13 @@ class Filter(object) :
       self.filtered = filtered
       
    #Get the filter's current settings
-   def GetCurrentSettings(self) :     
+   def getCurrentSettings(self) :     
       return(self.settings)
    
    def InitSettings(self) :
       settings = {}
       
-      name = self.GetName()
+      name = self.getName()
       settings = {}
       for option in self.options :
          settings[option] = True
@@ -90,17 +86,17 @@ class Filter(object) :
       
    
    #Set the setting configuration   
-   def SetSettings(self,settings) :
+   def setSettings(self,settings) :
       
       self.settings = settings
       
       #Whenever the settings are set, determine the new
       #filter state
-      self.SetFiltered()
+      self.setFiltered()
       
    #Get the setting of a specific option in the filter
    def GetOptionSetting(self,option) :
-      settings = self.GetCurrentSettings()
+      settings = self.getCurrentSettings()
       
       checked = False
       if (option in settings) :
@@ -111,11 +107,11 @@ class Filter(object) :
    
    #Determine whether or not we add the filter icon to
    #the column header.
-   def SetHeader(self) :
+   def setHeader(self) :
       #Iterate through each setting.
       #If at least one setting's value is 0,
       #display the filter icon on the header      
-      settings = self.GetCurrentSettings()      
+      settings = self.getCurrentSettings()      
       headerfilter = False
       if (not settings == None) :
          for prop in settings :
@@ -124,30 +120,30 @@ class Filter(object) :
                break   
                        
       #Call the model with the results
-      GetModel().SetHeader(self.GetName(),headerfilter)
-      GetManager().GetRemoveFilterAction().SetState()
+      getModel().setHeader(self.getName(),headerfilter)
+      getManager().getRemoveFilterAction().setState()
  
-   def SetFilter(self,option,value) :      
+   def setFilter(self,option,value) :      
       #Get the current setting configuration and set the option's
       #value as appropriate
-      settings = self.GetCurrentSettings()
+      settings = self.getCurrentSettings()
       settings[option] = value
       
       #Warn the the proxymodel that something is going to change
       #and the table needs to redraw...and thus refilter
-      GetModel().layoutAboutToBeChanged.emit() 
+      getModel().layoutAboutToBeChanged.emit() 
       
       #Assign the new setting configuration
-      self.SetSettings(settings) 
+      self.setSettings(settings) 
       
       #Let the proxy model know we're done.
-      GetModel().layoutChanged.emit()  
+      getModel().layoutChanged.emit()  
    
    #Select all options...basically unfilter the column
-   def SelectAll(self,selected) :
+   def selectAll(self,selected) :
       for option in self.options :        
-         self.SetFilter(option,selected)
-      self.SetHeader()      
+         self.setFilter(option,selected)
+      self.setHeader()      
       
       
    
@@ -159,7 +155,7 @@ class Filter(object) :
       keepalarm = True
       
       #Access the current configuration.
-      settings = self.GetCurrentSettings()
+      settings = self.getCurrentSettings()
       
       #Go through each filter option
       for option in self.options :
@@ -200,11 +196,11 @@ class CategoryFilter(Filter) :
    #Each category type has its own set of options   
    def GetOptions(self) :
       
-      return(list(GetConsumer().GetCategories()))
+      return(get_category_list())
    
    #Access the alarm's category         
    def GetFilterVal(self,alarm) :
-      return(alarm.GetCategory())
+      return(alarm.get_property('category',name=True))
 
 #A LocationFilter
 #Users can display/hide alarms based on location
@@ -214,11 +210,11 @@ class LocationFilter(Filter) :
       
    #Get the valid locations from Kafka           
    def GetOptions(self) :
-      return(list(GetConsumer().GetLocations()))   
+      return(get_location_list())   
       
    #Access the alarm's location
    def GetFilterVal(self,alarm) :
-      return(alarm.GetLocation())
+      return(alarm.get_property('location',name=True))
 
 #Choices for the status filter          
 class StatusFilter(Filter) :  
@@ -227,13 +223,19 @@ class StatusFilter(Filter) :
       self.options.remove("Empty")
    
    def GetOptions(self) :
-      return(['LATCHED','MAJOR','MINOR'] )
+      return(['LATCHED','MAJOR','ALARM','MINOR'] )
    
    #A little more processing on the return value.
    ### THIS MAY HAVE TO BE REVISITED ##      
    def GetFilterVal(self,alarm) :
-      return(alarm.GetStatus())
-     
+      #What's the state?
+      state = alarm.get_state(name=True)
+      val = alarm.get_sevr(name=True)      
+      if ("latched" in state.lower()) :
+         val = "LATCHED"      
+      return(val)
+   
+      
 
 #Type of alarm (epics,nagios,smart)
 class TypeFilter(Filter) :
@@ -244,7 +246,7 @@ class TypeFilter(Filter) :
       return(['epics'])      
    
    def GetFilterVal(self, alarm) :
-      return(alarm.GetType())
+      return(alarm.get_property('alarm_class',name=True))
 
 #Alarm priority      
 class PriorityFilter(Filter) :
@@ -255,10 +257,10 @@ class PriorityFilter(Filter) :
       
       
    def GetOptions(self) :
-      return(['P1','P2','P3'])
+      return(get_priority_list())
         
    def GetFilterVal(self,alarm) :
-      alarm.GetPriority()
+      alarm.get_property('priority',name=True)
 
 #Popup context menu assigned to header columns
 class FilterMenu(QtWidgets.QMenu) :
@@ -276,7 +278,7 @@ class FilterMenu(QtWidgets.QMenu) :
       self.allcheckbox = None
       
       self.setTearOffEnabled(True) 
-      title = filter.GetName().capitalize() + " Filters"   
+      title = filter.getName().capitalize() + " Filters"   
       self.addSection(title)
             
       #Create the options for this filter
@@ -345,7 +347,7 @@ class FilterMenu(QtWidgets.QMenu) :
          checkbox.clicked.connect(self.Trigger)
       elif (option.lower() == "all") :
          self.allcheckbox = checkbox
-         checkbox.clicked.connect(self.SelectAll)
+         checkbox.clicked.connect(self.selectAll)
       return(widget)
    
    #Called when a filter option is selected/deselected      
@@ -355,17 +357,17 @@ class FilterMenu(QtWidgets.QMenu) :
       option = sender.text()    
       
       #Actually set the filter 
-      self.filter.SetFilter(option,value)
+      self.filter.setFilter(option,value)
       
       #Redetermine the value of the "all" option
       self.ConfigAllOption()
       
       #Set the column header based on the new state
-      self.filter.SetHeader()
+      self.filter.setHeader()
       
 
    #Called when the "All" option is selected/deselected 
-   def SelectAll(self,selected) :      
+   def selectAll(self,selected) :      
       #select/unselect each check box
       filter = self.filter
       for checkbox in self.checkboxlist :       
@@ -373,9 +375,9 @@ class FilterMenu(QtWidgets.QMenu) :
          #apply the filter for the option
          option = checkbox.text()
          val = checkbox.isChecked()
-         filter.SetFilter(option,val)
+         filter.setFilter(option,val)
       #Set the header icon
-      filter.SetHeader()
+      filter.setHeader()
       
    #Configure the "All" checkbox based on whether or not
    #all or some of the options have been selected  

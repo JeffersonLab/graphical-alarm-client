@@ -5,6 +5,9 @@ INSTRUCTIONS
 #docker build . -t gui --no-cache
 docker-compose up
 
+#load ps command
+apt-get update && apt-get install -y procps
+
 
 ######################################################
 #Set up environment
@@ -16,11 +19,12 @@ echo $ip
 
 #New code from Ryan
 update docker-compose.yml
-docker-compose build -—no-cache 
+docker-compose build -—no-cache (do not cut and paste)
 
 #Create schemas prior to start up
-docker exec -it console /scripts/registry/create-alarm-schemas.py
+docker exec -it jaws /scripts/registry/create-alarm-schemas.py
 #run script
+pip install jlab-jaws
 docker exec -u root -it gui bash
 
 python3 AlarmManager.py
@@ -28,26 +32,23 @@ python3 AlarmManager.py
 
 CONSOLE COMMANDS
 -------------------
-docker exec -it console /scripts/client/set-shelved.py --reason "We are testing this alarm" --expirationseconds 5 alarm1
+docker exec -it jaws /scripts/client/set-registered.py latching1 --latching --producersimple
+docker exec -it jaws /scripts/client/set-state.py alarm1 --state Active
+docker exec -it jaws /scripts/client/set-active.py alarm1 
 
-docker exec -it console /scripts/client/set-shelved.py --unset alarm1
-
-docker exec -it console /scripts/client/set-registered.py --producerpv VAL --location INJ --category Misc --latching --docurl "" --screenpath "" LATCHING
-
-docker exec -it console /plugins/epics/scripts/set-alarming-epics.py --sevr MAJOR --stat HIHI channel2
-
-
-
-#docker exec -it console bash
 
 REMEMBER TO CHECK IP=DOCKER_DISPLAY if getting display errors
+----------------------------
+^Cqt.qpa.xcb: could not connect to display 192.168.1.2:0
+qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
+This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
 
-
-TO DO:
-   Deal with first set of alarms on startup. 
-   
+Available platform plugins are: eglfs, linuxfb, minimal, minimalegl, offscreen, vnc, wayland-egl, wayland, wayland-xcomposite-egl, wayland-xcomposite-glx, webgl, xcb.
 
 Command=line editor = nano
+nano ./bash_profile
+
+
 
 
 pyQT5 --
