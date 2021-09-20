@@ -76,6 +76,7 @@ class JAWSManager(QtWidgets.QMainWindow) :
    def __init__(self,title,type,*args,**kwargs) :
       super(JAWSManager,self).__init__(*args,**kwargs)
       
+      
       setManager(self)
          
       #Instantiate Manager members

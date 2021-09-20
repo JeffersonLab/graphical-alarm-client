@@ -85,7 +85,17 @@ def MakeBold(label) :
    font = QtGui.QFont()
    font.setBold(True)
    label.setFont(font)
-   
+
+def setGroupBoxStyle(groupbox) :
+   groupbox.setStyleSheet('QGroupBox{font-weight: bold; color: darkRed}')  
+
+def setDialogStyle(dialog) :
+   dialog.setStyleSheet('QDialog{border: 5px solid black;}')   
+
+def setButtonStyle(button) :
+   button.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
+
+
 ####### CREATE PROPERTY ROWS #####
 
 def setMessage(timestamp,message) :

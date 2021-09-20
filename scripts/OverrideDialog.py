@@ -14,8 +14,7 @@ class OverrideDialog(QtWidgets.QDialog) :
    """ Access to the various Override Options
    """
    def __init__(self,preselectedalarms=None,parent=None,*args,**kwargs) :
-      print("OVERRIDE DIALOG")
-      
+          
       """ 
          .. automethod:: __init__
          .. rubric:: Methods
@@ -26,6 +25,8 @@ class OverrideDialog(QtWidgets.QDialog) :
             parent : parent of dialog
       """     
       super(OverrideDialog,self).__init__(parent,*args,**kwargs)
+      self.setStyleSheet('QDialog{border: 5px solid black;}')
+      
       
       #The override types that can be selected
       self.OVERRIDETYPES = {
@@ -216,6 +217,8 @@ class SearchWidget(QtWidgets.QGroupBox) :
       """               
       super(SearchWidget,self).__init__("Active Alarms",parent,*args,**kwargs)
       
+      setGroupBoxStyle(self)
+  
       searchlayout = QtWidgets.QGridLayout()
       
       self.search = AlarmSearch(alarmlist,parent)
@@ -237,6 +240,7 @@ class ReasonWidget(QtWidgets.QGroupBox) :
             parent : override dialog
       """               
       super(ReasonWidget,self).__init__("Reason for Override",parent,*args,**kwargs)
+      setGroupBoxStyle(self)      
       
       reasonlayout = QtWidgets.QGridLayout()      
       self.reasoncombo = ReasonCombo(parent)
@@ -360,8 +364,10 @@ class ButtonWidget(QtWidgets.QWidget) :
       buttonlayout.addWidget(button)
       button.clicked.connect(parent.closeDialog)
       
+      button.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
       button = QtWidgets.QPushButton("OK")
       button.clicked.connect(parent.checkOverrideConfig)
+      button.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
       buttonlayout.addWidget(button)
     
       self.setLayout(buttonlayout)

@@ -104,7 +104,9 @@ class AlarmManager(JAWSManager) :
 class AlarmToolBar(ToolBar) :
    def __init__(self,parent,*args,**kwargs) :
       super(AlarmToolBar,self).__init__(parent,*args,**kwargs)
-   
+      self.setStyleSheet('QToolBar{border: 2px solid darkRed;}')
+  
+  #    background-color: black;
    #Create the toolbar actions
    def addActions(self) :
       super().addActions()
@@ -126,8 +128,9 @@ class AlarmMenuBar(QtWidgets.QMenuBar) :
       """ Create the menu bar
       """
       super(AlarmMenuBar,self).__init__(parent,*args,**kwargs)                
-      filemenu = self.addMenu("File")
       
+      filemenu = self.addMenu("File")
+  #    filemenu.setStyleSheet('QMenu:QMenuItem{background-color: blue;}')
       prefsaction = PrefAction(self)
       filemenu.addAction(prefsaction)
       
@@ -138,8 +141,9 @@ class AlarmMenuBar(QtWidgets.QMenuBar) :
       exitaction = QAction("Quit",self)
       exitaction.triggered.connect(parent.closeEvent)
       filemenu.addAction(exitaction)
-   
-  
+      
+      self.setStyleSheet('QMenuBar{background-color: black; color: white}')
+ 
    def LaunchShelfManager(self,event) :
       """ User can launch an instance of the ShelfManager
       """
@@ -154,5 +158,7 @@ def handler(signal_received,frame) :
 
    
 app = QtWidgets.QApplication(sys.argv)
+#app.setStyleSheet('QMainWindow{background-color: black;border: 1px solid black;}')
+app.setStyleSheet('QMainWindow{border: 5px solid darkRed;}')
 window = AlarmManager()
 app.exec()

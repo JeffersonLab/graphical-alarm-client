@@ -14,7 +14,7 @@ from Filters import *
 class PrefDialog(QtWidgets.QDialog) :
    def __init__(self,parent=None,*args,**kwargs) :
       super().__init__()
-      
+      self.setStyleSheet('QDialog{border: 5px solid black;}')
       self.setModal(False)
       self.setSizeGripEnabled(True)
       self.setSizePolicy(
@@ -71,10 +71,12 @@ class PrefDialog(QtWidgets.QDialog) :
       acceptbutton = QtWidgets.QPushButton("Accept Changes")
       acceptbutton.clicked.connect(self.applyChanges)
       layout.addWidget(acceptbutton) 
+      acceptbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
       
       cancelbutton = QtWidgets.QPushButton("Close")
       cancelbutton.clicked.connect(self.Close)
       layout.addWidget(cancelbutton)
+      cancelbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
       return(widget)
    
    #Apply changes for each applicable section
@@ -146,6 +148,8 @@ class FilterButton(QtWidgets.QPushButton) :
 class FilterPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent,*args,**kwargs) :
       super(FilterPrefs,self).__init__("Filters",parent)
+      
+      setGroupBoxStyle(self)
       
       #Each filter will have a button that will need to be configured
       self.filterbuttons = []
@@ -259,6 +263,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent,*args,**kwargs) :
       super(SortPrefs,self).__init__("Default Sort",parent)
       
+      setGroupBoxStyle(self)
       self.prefs = getManager().getPrefs()
       layout = QtWidgets.QHBoxLayout()
       self.setLayout(layout)
@@ -396,7 +401,8 @@ class SortPrefs(QtWidgets.QGroupBox) :
 class DisplayPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent, *args,**kwargs) :
       super(DisplayPrefs,self).__init__("Display Columns",parent)      
-           
+      
+      setGroupBoxStyle(self)
       #Using a gridlayout, so will keep track of the rows.
       self.row = None
       self.showlist = []
