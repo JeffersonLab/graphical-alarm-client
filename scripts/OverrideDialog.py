@@ -1,271 +1,97 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt, QObject,QThreadPool
-from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
 
-from CheckableComboBox import *
+
 from utils import *
 from Actions import *
+from AlarmSearch import *
+from DurationWidget import *
+
 from jlab_jaws_helper.JAWSConnection import *
-#from TableView import *
+
 
 
 class OverrideDialog(QtWidgets.QDialog) :
-   def __init__(self,parent=None,*args,**kwargs) :
+   """ Access to the various Override Options
+   """
+   def __init__(self,preselectedalarms=None,parent=None,*args,**kwargs) :
+      print("OVERRIDE DIALOG")
+      
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
+         
+         Create an OverrideDialog
+         Parameters:
+            preselectedalarms (list) : list of alarms to pre-selectedalarms
+            parent : parent of dialog
+      """     
       super(OverrideDialog,self).__init__(parent,*args,**kwargs)
       
-      self.setModal(0)
-      self.setSizeGripEnabled(True)
-      
-      #Layout is a simple Grid
-      mainlayout = QtWidgets.QGridLayout()
-      
-      self.alarmsearch = AlarmSearch(self.getAlarms(),self)
-      mainlayout.addWidget(self.alarmsearch,0,0)
-      
-      self.setLayout(mainlayout)
-      self.setWindowTitle("Override Alarms")
-      self.show()
-   
-   def getAlarms(self) :
-      alarms = sorted(getAlarmNames())
-      
-      return(alarms)
-   
-   def reset(self) :
-   
-      self.alarmsearch.updateSearch(self.getAlarms())
-      
-      
-#####  Override Dialog's subwidgets
-class AlarmSearch(CheckableComboBox) :
-   def __init__(self,alarmlist,parent=None) :
-      super(AlarmSearch,self).__init__(parent)
-      
-     # self.setFixedWidth(200)
-      self.alarmlist = ["All"]
-      self.alarmlist.extend(alarmlist)
-      
-      self.addItems(self.alarmlist)
-      self.lineEdit().setReadOnly(False)
-      self.setEditText("Select")
-     
-      ####GOOD
-      self.lineEdit().returnPressed.connect(self.take_item)
-      self.textActivated.connect(self.select_item) ###
-      #self.view().setMinimumWidth(10000)
-   
-   
-   #Override the widget's initial size hint
-   def sizeHint(self) :
-      size = QtCore.QSize()
-      height = 1 
-      width = 250
-      size.setHeight(height)
-      size.setWidth(width)      
-      return(size)
-
-   #GOOD
-   def select_item(self,alarmname) :
-      if (len(alarmname) == 0) :
-         return
-      if (alarmname.lower() == "all") :
-         return
-      itemlist = self.model().findItems(alarmname)
-      if (len(itemlist) == 0) :
-         return      
-      item = itemlist[0]      
-      
-      if (not item.checkState()) :
-         item.setCheckState(Qt.Checked)
-      
-      if self.closeOnLineEditClick:
-         self.hidePopup()
-      else:
-         self.showPopup()
-
-   #GOOD 
-   def select_all(self,allitem) :
-      
-      state = Qt.Checked
-      if (allitem.checkState()) :
-         state = Qt.Unchecked
-      
-      numrows = self.model().rowCount() 
-      for row in range(numrows) :
-         if (row == 0) :
-            continue
-         alarm = self.model().item(row)
-         alarm.setCheckState(state)
-   
-   
-   #GOOD
-   def take_item(self) :      
-      alarmname = self.lineEdit().text()  
-      if (alarmname.lower() == "all") :
-         print("TAKE_ITEM SELECT ALL!!!")
-         return
+      #The override types that can be selected
+      self.OVERRIDETYPES = {
+          'oneshot' : {'label' : "Oneshot override", 'action' : self.oneShotOverride},
+          'quick'   : {'label' : "Quick select", 'action' : self.timedOverride},
+          'custom'  : {'label' : "Custom duration", 'action' : self.timedOverride},
+          'remove'  : {'label' : "Remove from service", 'action' : self.disableOverride}
+      }
         
-      itemlist = self.model().findItems(alarmname)
-      if (len(itemlist) == 0) :        
-         return    
+      self.reason = None    #Reason for override (required)
+      self.comments = None  #Optional comments
       
-      self.select_item(alarmname)
-   
-   #GOOD
-   def updateSearch(self,alarmlist) :
-      
-      self.clear()
-      self.alarmlist = ["All"]
-      self.alarmlist.extend(alarmlist)
-
-      
-      count = 0
-      for alarmname in self.alarmlist :
-         self.addItem(alarmname)
-         item = self.model().item(count,0)
-     
-      completer = QtWidgets.QCompleter(alarmlist)
-      completer.setCaseSensitivity(0)
-      self.setCompleter(completer)
-      #self.setCurrentText("Select")
-      self.setEditText("Select")
-
-
-
-
-
-
-
-
-
-
-
-
-
-#Dialog that is invoked when the user wants to shelve alarms.
-class OLDOverrideDialog(QtWidgets.QDialog) :
-   def __init__(self,parent=None,*args,**kwargs) :
-      super(OverrideDialog,self).__init__(parent,*args,**kwargs)
+      self.selected = preselectedalarms  #Alarms to override
+      if (not preselectedalarms or preselectedalarms == None) :
+         self.selected = None
       
       self.setModal(0)
       self.setSizeGripEnabled(True)
       
-      #Layout is a simple VBox
+      #Search widget to selected alarms
+      self.searchwidget = SearchWidget(self.getAlarms(),self)
+      self.search = self.searchwidget.search
+      
+      #Duration options
+      self.durationwidget = DurationWidget(self) ## Widget imported.
+      
+      #Reason and comments
+      self.reasonwidget = ReasonWidget(self)
+      
+      #Bottom buttons
+      buttonwidget = ButtonWidget(self)
+      
+      #Add the widgets to the main layout
       mainlayout = QtWidgets.QVBoxLayout()
       
-      #The reason for shelving the alarm
-      self.reasoncombo = OverrideReasonCombo(self)
-      mainlayout.addWidget(self.reasoncombo,0,Qt.AlignCenter)
-      
-      #Dial widget allowing the user to set the shelflife of the alarm.
-      self.overrideduration = OverrideDuration(self)
-      mainlayout.addWidget(self.overrideduration,0,Qt.AlignCenter)
-      
-      #Remove the alarm entirely from service
-      self.remove = RemoveFromService(self)
-      mainlayout.addWidget(self.remove,0,Qt.AlignCenter)
-      
-      #Optional comments 
-      commentswidget = OverrideCommentsWidget(self)
-      mainlayout.addWidget(commentswidget)
-      self.commentswidget = commentswidget
-      
-      #Buttons for the dialog
-      buttonwidget = self.MakeButtons()
+      mainlayout.addWidget(self.searchwidget)
+      mainlayout.addWidget(self.durationwidget)
+      mainlayout.addWidget(self.reasonwidget)
       mainlayout.addWidget(buttonwidget)
-      
       self.setLayout(mainlayout)
+      
       self.setWindowTitle("Override Alarms")
       self.show()
+       
+   
+   
+   def checkOverrideConfig(self) :
+      """ Check that all required properties have been set.
+      """      
       
-   #Create the buttons associated with this dialog
-   def MakeButtons(self) :
-      buttonwidget = QtWidgets.QWidget()
-      buttonlayout = QtWidgets.QHBoxLayout()
-      buttonwidget.setLayout(buttonlayout)
+      reason = self.reasonwidget.getReason()
+      durationtype = self.durationwidget.durationType()
       
-      button = QtWidgets.QPushButton("Cancel")
-      buttonlayout.addWidget(button)
-      button.clicked.connect(self.Close)
-      
-      button = QtWidgets.QPushButton("OK")
-      buttonlayout.addWidget(button)
-      button.clicked.connect(self.CheckOverrideConfig)
-      return(buttonwidget)
-   
-   #Access the dialog's subwidgets, and methods
-   #All actions pertaining to the subwidgets, are handled through the
-   #dialog.
-   
-   #Reason
-   def GetReason(self) :
-      return(self.reasoncombo.GetReason())
-   
-   def SetReason(self,index=0) :
-      self.reasoncombo.SetReason(index)
-   
-   #Remove from service
-   def GetRemoveState(self) :
-      return(self.remove.GetRemoveState())
-
-   def SetRemoveState(self,remove) :
-      self.remove.SetRemoveState(remove)
-      
-   #life 
-   
-   #Disable the OverrideDuration widget when "Remove from Service" is selected.     
-   def DisableOverrideDuration(self,disable) :
-      self.overrideduration.DisableOverrideDuration(disable)
-      
-   #Set the override duration dial
-   def SetDial(self,value=None) :
-      self.overrideduration.SetDial(value)
-      
-   #Calculate the override duration
-   def CalculateOverrideDuration(self) :
-      return(self.overrideduration.CalculateOverrideDuration())
-   
-   #Comments      
-   def GetComments(self) :
-      return(self.commentswidget.GetComments())  
-   
-   def ClearComments(self) :
-      self.commentswidget.ClearComments()   
-   
-   #If dialog re-opened, clear out old info.
-   def reset(self) :
-      self.SetReason(0)
-      self.SetRemoveState(False)
-      self.SetDial()
-      self.ClearComments()
-    
-   #Close the dialog           
-   def Close(self) :
-      self.close()
-    
-   #Override the selected alarms  
-   #******NEED TO DEAL WITH REMOVED FROM SERVICE      
-   
-   #Has the user filled out the the required information?
-   def CheckOverrideConfig(self) :
-      ok = True
       message = None
       
       #Have any alarms been selected?
-      numselected = getSelectedAlarms()
-      if (len(numselected) == 0) :
-         ok = False
-         message = "Select an alarm to override"
-           
-      else :
-         reason = self.GetReason()         
-         if ("reason" in reason.lower()) :
-            ok = False
-            message = "Need a reason"      
-      
-      #Inform the user 
+      alarmlist = self.getSelectedAlarms()
+      if (len(alarmlist) == 0) :
+         message = "Select an alarm to override"      
+      elif ("reason" in reason.lower()):
+         message = "Need a reason"      
+      elif (durationtype == None) :
+         message = "Please select an override duration"
+            
+      #Inform the user if something is missing
       if (message != None) :
-
          msgBox = QtWidgets.QMessageBox()
          msgBox.setIcon(QtWidgets.QMessageBox.Warning)
          msgBox.setText(message)
@@ -273,220 +99,238 @@ class OLDOverrideDialog(QtWidgets.QDialog) :
          reply = msgBox.exec()
          return
       
-      self.OverrideAlarms()
-      self.Close()
-   
+      #Everything's there, override the alarms.
+      self.overrideAlarms(alarmlist)
+
    #Shelve the selected alarms
-   def OverrideAlarms(self) :
+   def overrideAlarms(self,alarmlist) :
+      """ 
+         Override the selected alarms
+         Parameters:
+            alarmlist (list) : list of alarms override
+      """
+       
+      self.reason = self.getReason() #required
+      self.comments = self.getComments() #optional
       
-      alarmlist = getSelectedAlarms()
-      confirmed = ConfirmAlarms(alarmlist)
-      if (not confirmed) :
-         return         
-            
-      reason = self.GetReason()
-      duration = self.CalculateOverrideDuration()   
-          
-      for alarm in alarmlist :
-         print("OVERRIDE",alarm.get_name(),reason,duration)
-       #  alarm.Override.request(reason,duration)
+      #Call the subroutine for the duration type selected.
+      overridetype = self.durationwidget.durationType()
+      subroutine = self.OVERRIDETYPES[overridetype]['action'](alarmlist)
+                  
+   def oneShotOverride(self,alarmlist) :
+      """ 
+         Oneshot override (clears alarm for this instance only)
+         Parameters:
+            alarmlist (list) : list of alarms override
+      """
+      action = OneShotAction(None)    
+      action.performAction(self.reason,self.comments,alarmlist)
    
-   def reset(self) :
-      pass
+   def timedOverride(self,alarmlist) :
+      """ 
+         Timed override
+         Parameters:
+            alarmlist (list) : list of alarms override
+      """
+      #Calculate the duration of the override (in seconds)
+      seconds = self.durationwidget.calcDuration()
+      action = TimedOverrideAction(None,seconds)
+      action.performAction(self.reason,self.comments,alarmlist)
+
+   def disableOverride(self,alarmlist) :
+      """ 
+         Disabled (out of service)
+         Parameters:
+            alarmlist (list) : list of alarms override
+      """      
+      action = DisableAction(None)
+      action.performAction(self.comments,alarmlist)
+   
+   def getAlarms(self) :
+      """ Get a list of the alarm names in the model
+      """
+      alarms = sorted(getAlarmNames())     
+      return(alarms)
+
+   def setSelection(self,preselectedalarms) :
+      """ Preselect alarms in the search box
+          NOTE: Used when the dialog is called from contextmenu
          
-#Reason for override
-class OverrideReasonCombo(QtWidgets.QComboBox) :
-   def __init__(self,parent=None, *args,**kwargs) :
-      super(OverrideReasonCombo,self).__init__(parent,*args,**kwargs)
+         Parameters:
+            preselectedalarms (list) : list of alarms to pre-selectedalarms          
+      """     
       
-      reasonlist = ["Reason for Override"]
+      self.search.setSelection(preselectedalarms)
+              
+   
+   def getSelectedAlarms(self) :
+      """ Access the alarms selected for override
+      """  
+      alarmnames = self.search.getSelectedAlarms()      
+      alarmlist = []
+      for name in alarmnames :
+         alarm = getManager().processor.find_alarm(name)
+         alarmlist.append(alarm)
+      
+      return(alarmlist)
+   
+   def getReason(self) :
+      """ Access the reason selected for override
+      """  
+      return(self.reasonwidget.getReason())
+      
+   def getComments(self) :
+      """ Access optional comments
+      """  
+      comments = self.reasonwidget.getComments()
+      if (len(comments) == 0) :
+         comments = None
+      return(comments)
+      
+        
+   def closeDialog(self) :
+      """ Close the dialog
+      """  
+      self.close() #This "close" is the widget's built in subroutine
+ 
+   
+   def reset(self) :      
+      """ Reset all parameters if the dialog is closed and reopened
+      """  
+      self.search.updateSearch(self.getAlarms())
+      self.reasonwidget.clearReason()
+      self.durationwidget.clearDuration()
+
+
+class SearchWidget(QtWidgets.QGroupBox) :
+   """ Auto-complete/checkable combo box displaying alarms 
+   """
+   def __init__(self,alarmlist,parent=None,*args,**kwargs) :
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
+         
+         OverrideWidget's search widget
+         Parameters:           
+            parent : override dialog
+      """               
+      super(SearchWidget,self).__init__("Active Alarms",parent,*args,**kwargs)
+      
+      searchlayout = QtWidgets.QGridLayout()
+      
+      self.search = AlarmSearch(alarmlist,parent)
+      searchlayout.addWidget(self.search,0,0)          
+      
+      self.setLayout(searchlayout)
+
+
+class ReasonWidget(QtWidgets.QGroupBox) :
+   """ Combobox with list of official "reasons" and an optional box for comments
+   """
+
+   def __init__(self,parent=None,*args,**kwargs) :
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
+         
+         Parameters:           
+            parent : override dialog
+      """               
+      super(ReasonWidget,self).__init__("Reason for Override",parent,*args,**kwargs)
+      
+      reasonlayout = QtWidgets.QGridLayout()      
+      self.reasoncombo = ReasonCombo(parent)
+      reasonlayout.addWidget(self.reasoncombo,0,1,Qt.AlignHCenter)
+      
+      label = QtWidgets.QLabel("Comments (opt)")
+      reasonlayout.addWidget(label,1,0)
+      
+      self.reasoncomments = CommentsEdit(parent)
+      reasonlayout.addWidget(self.reasoncomments,1,1)
+      self.setLayout(reasonlayout)
+      
+   def clearReason(self) :
+      self.setReason(0)
+      self.reasoncomments.clearComments()
+      
+   def getReason(self) :
+      """ Get the selected reason
+      """
+      return(self.reasoncombo.getReason())
+     
+   def getComments(self) :
+      """ Get the optional comments
+      """
+      return(self.reasoncomments.getComments())  
+   
+   def setReason(self,index=0) :
+      """ Set the reason to the requested index 
+      """
+      self.reasoncombo.setReason(index)
+
+        
+class ReasonCombo(QtWidgets.QComboBox) :
+   """ Combobox with list of canned reasons for an override
+   """
+   
+   def __init__(self,parent=None, *args,**kwargs) :
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
+         
+         Parameters:           
+            parent : override dialog
+      """               
+      super(ReasonCombo,self).__init__(parent,*args,**kwargs)
+      
+      # List of reasons comes from JAWSConnection
+      reasonlist = ["Select Reason"]
       reasonlist.extend(get_override_reasons())
       
-      #Waiting for official list from Ops
-      #reasonlist = ["Reason for Override", 'Nuisance', 'Broken', 'Maintenance']        
       for reason in reasonlist :
          self.addItem(reason)  
       
-      #Have to do this little dance in order to make the
-      #text centered. 
-      self.setEditable(True)
-      lineedit = self.lineEdit()      
-      lineedit.setAlignment(Qt.AlignCenter)
-      lineedit.setReadOnly(True)
-      
+      self.setEditable(False)    
       #Make sure the width is reasonable.
       self.setFixedWidth(200)
    
-   #Setter and getter
-   def SetReason(self,index) :
+ 
+      
+   def setReason(self,index) :
+      """ Set the reason to the requested index
+      """
       self.setCurrentIndex(index)
       
-   def GetReason(self) :
+   def getReason(self) :
+      """ Retrieve the selected reason
+      """
       return(self.currentText())  
 
-#Remove from service option
-class RemoveFromService(QtWidgets.QRadioButton) :
+class CommentsEdit(QtWidgets.QPlainTextEdit) :
+   """ Optional override comments
+   """
    def __init__(self,parent=None,*args,**kwargs) :
-      super(RemoveFromService,self).__init__(
-         "Remove from Service",parent,*args,**kwargs)
-      
-      self.parent = parent  
-      self.toggled.connect(self.RemoveFromService) 
-   
-   def SetRemoveState(self,remove = True) :
-      self.setChecked(remove)
-      
-   def GetRemoveState(self) :
-      return(self.isChecked())
-      
-   def RemoveFromService(self,remove) :
-      self.parent.DisableOverrideDuration(remove)
-
-#User selects the amount of time to shelve the alarm.
-class OverrideDuration(QtWidgets.QWidget) :
-   def __init__(self,parent=None,*args,**kwargs) :
-      super(OverrideDuration,self).__init__(parent,*args,**kwargs)
-      
-      #5 days in minutes
-      self.maxlife = 7200
-      self.minlife = 1
-      self.defaultlife = 60
-      
-      #testing
-      self.defaultlife = 0.1
-
-      layout = QtWidgets.QGridLayout()
-      self.setLayout(layout)
-      
-      label = QtWidgets.QLabel("Override Duration")
-      layout.addWidget(label,0,0)
-      
-      #dial readback
-      val = QtWidgets.QLineEdit()
-      val.setReadOnly(True)
-      val.setAlignment(Qt.AlignRight)
-      val.setFixedWidth(50)
-      val.setText(str(self.defaultlife))
-      layout.addWidget(val,0,1)      
-      self.lifeval = val
-      
-      #units will change based on the number of minutes dialed in.
-      units = QtWidgets.QLabel("mins")
-      units.setFixedWidth(50)
-      
-      layout.addWidget(units,0,2)
-      self.lifeunits = units
-      
-      #The dial widget
-      dial = QtWidgets.QDial()
-      dial.setMinimum(1)
-      dial.setMaximum(self.maxlife) 
-      dial.setValue(self.defaultlife)
-      dial.setNotchesVisible(True)
-      dial.valueChanged.connect(self.SetOverrideDuration)
-      dial.setSingleStep(10)
-      dial.setRange(self.minlife,self.maxlife) 
-      layout.addWidget(dial,1,0,1,3)  
-      
-      self.dial = dial
-   
-   #Called when the dial is used.
-   def SetOverrideDuration(self) :
-      #value will be in minutes
-      value = self.dial.value()      
-      
-      #How many hours and days?  
-      hours = value/60
-      days = hours/24      
-      
-      #convert to hours, and change the units
-      if (hours > 1 and days < 1) :
-         units = "hours"
-         value = '{:0.2f}'.format(hours)
-      #convert to days and change the units
-      elif (days > 1) :
-         units = "days"
-         value = '{:0.2f}'.format(days)     
-      #units are min
-      else :      
-         units = "mins"
-      
-      #Update the readback and the units
-      self.SetLifeVal(str(value))
-      self.SetLifeUnits(units)
-
-   #Disable/enable the widget when 
-   #"Remove from Service" selected/deselected
-   def DisableOverrideDuration(self,disable) :
-      if (disable) :
-         self.SetDurationVal("")
-         self.SetDurationUnits("")
-         self.SetDialState(False)
-      else :
-         #If enabling the widget, 
-         #call "SetShelfLife" directly.  
-         self.SetOverrideDuration()
-         self.SetDialState(True)
-   
-   #Set the value for the dial readback
-   def SetLifeVal(self,value) :
-      lifeval = self.lifeval
-      lifeval.setText(value)
-   
-   #update the units for the dial
-   def SetLifeUnits(self,units) :
-      lifeunits = self.lifeunits
-      lifeunits.setText(units)
-   
-   #enable/disable the dial
-   def SetDialState(self,enabled=True) :
-      self.dial.setEnabled(enabled)
-
-   #Set the dial explicitly.
-   #If a value is not passed in, use the default
-   def SetDial(self,value=None) :
-      if (value == None) :
-         value = self.defaultlife
-      self.dial.setValue(value)
-               
-   #The dial is in minutes, convert to seconds
-   def CalculateOverrideDuration(self) :      
-      value = self.dial.value() * 60
-      return(value)
-    
-#Optional user comments. Consists of a label and
-#QPlainTextEdit widget
-class OverrideCommentsWidget(QtWidgets.QWidget) :
-   def __init__(self,parent=None,*args,**kwargs) :
-      super(OverrideCommentsWidget,self).__init__(parent)
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
          
-      commentslayout = QtWidgets.QHBoxLayout()
-      self.setLayout(commentslayout)
+         Parameters:           
+            parent : override dialog
+      """               
+      super(CommentsEdit,self).__init__(parent)
       
-      label = QtWidgets.QLabel("Comments")
-      commentslayout.addWidget(label)
-      
-      #Inherit from QPlainTextEdit to adjust sizeHint
-      comments = OverrideCommentsEdit(self)
-      commentslayout.addWidget(comments)
-      comments.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
+      self.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding,
          QtWidgets.QSizePolicy.MinimumExpanding)
-      self.editcomments = comments
-   
-   #Get the contents of the comment widget   
-   def GetComments(self) :
-      return(self.editcomments.toPlainText())
-   
-   #Clear the comments widget  
-   def ClearComments(self) :
-      self.editcomments.clear()   
-
-
-#Create subclass in order to override sizeHint     
-class OverrideCommentsEdit(QtWidgets.QPlainTextEdit) :
-   def __init__(self,parent=None,*args,**kwargs) :
-      super(OverrideCommentsEdit,self).__init__(parent)
       
+   def getComments(self) :
+      """ Get comments text
+      """
+      return(self.toPlainText())
+   
+   def clearComments(self) :
+      """ Clear comment box
+      """
+      self.clear()     
       
    #Override the widget's initial size hint
    def sizeHint(self) :
@@ -496,3 +340,28 @@ class OverrideCommentsEdit(QtWidgets.QPlainTextEdit) :
       size.setHeight(height)
       size.setWidth(width)      
       return(size)
+
+class ButtonWidget(QtWidgets.QWidget) :
+   """ Buttons for the dialog
+   """
+   def __init__(self,parent=None,*args,**kwargs) :
+      """ 
+         .. automethod:: __init__
+         .. rubric:: Methods
+         
+         Parameters:           
+            parent : override dialog
+      """               
+      super(ButtonWidget,self).__init__(parent,*args,**kwargs) 
+         
+      buttonlayout = QtWidgets.QHBoxLayout()
+      
+      button = QtWidgets.QPushButton("Cancel")
+      buttonlayout.addWidget(button)
+      button.clicked.connect(parent.closeDialog)
+      
+      button = QtWidgets.QPushButton("OK")
+      button.clicked.connect(parent.checkOverrideConfig)
+      buttonlayout.addWidget(button)
+    
+      self.setLayout(buttonlayout)

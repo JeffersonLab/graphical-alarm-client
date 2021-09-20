@@ -14,7 +14,7 @@ from Actions import *
 #Active Alarms have slightly different properties than Shelved
 class PropertyDialog(QtWidgets.QDialog) :
    def __init__(self,alarm,parent=None,*args,**kwargs) :
-      super(PropertyDialog,self).__init__(parent,*args,**kwargs)
+      super(PropertyDialog,self).__init__(None,*args,**kwargs)
       
       self.row = None
       self.alarm = alarm
@@ -46,8 +46,12 @@ class PropertyDialog(QtWidgets.QDialog) :
             'label' : "Category:", 'static' : True},
       }
       
-      self.setModal(False)
+      self.setModal(0)
       self.setSizeGripEnabled(True)
+      
+      #mainlayout = QtWidgets.QGridLayout()
+      
+      
       
       layout = QtWidgets.QGridLayout()
       layout.setHorizontalSpacing(10)
@@ -62,7 +66,6 @@ class PropertyDialog(QtWidgets.QDialog) :
       
       groupbox = QtWidgets.QGroupBox(self.alarm.get_name() + " Properties")
       groupbox.setLayout(layout)
-      
       vlayout = QtWidgets.QVBoxLayout()
       
       #Don't let the widget be resized
@@ -353,7 +356,8 @@ class AlarmPropertyDialog(PropertyDialog) :
    #Update the border based on the alarm's severity
    def updateBorder(self) :
       color = GetStatusColor(self.alarm.get_sevr())
-      
+      if (color == None) :
+         return
       border = "border: 5px solid " + color
       stylesheet = self.styleSheet()
       style = "QDialog" + "{" + "border: 5px solid " + color + ";" +  "}"      
@@ -375,17 +379,18 @@ class AlarmPropertyDialog(PropertyDialog) :
       layout.addWidget(button)
       button.clicked.connect(self.closeDialog)
       
-      self.shelfaction = ShelfAction(self)
-      self.shelfbutton = QtWidgets.QPushButton("Override")
+     # self.shelfaction = ShelfAction(self)
+      #self.shelfbutton = QtWidgets.QPushButton("Override")
       #self.shelfbutton.clicked.connect(self.ShelveAlarm)
       
-      layout.addWidget(self.shelfbutton)
+      #layout.addWidget(self.shelfbutton)
            
       widget = QtWidgets.QWidget()
       widget.setLayout(layout)
+      
       return(widget)  
    
    def acknowledgeAlarm(self) :
       action = AckAction(self)
-      action.acknowledgeAlarm(self.alarm.get_name())
+      action.performAction(self.alarm.get_name())
       

@@ -83,5 +83,18 @@ services:
     environment:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
-
+   
+  auto:
+    image: slominskir/jaws-auto-override-processor:1.4.0
+    hostname: auto
+    container_name: auto
+    depends_on:
+      - zookeeper
+      - kafka
+      - registry
+      - jaws
+    environment:
+      BOOTSTRAP_SERVERS: "kafka:9092"
+      SCHEMA_REGISTRY: "http://registry:8081"
+      
    

@@ -12,6 +12,7 @@ class AlarmProcessor(JAWSProcessor) :
       #Don't need to register for overridden-alarms because we'll
       #use the 'alarm-state' to display
       topics = ['registered-alarms','active-alarms','alarm-state']
+      #topics = ['active-alarms','alarm-state']
       super(AlarmProcessor,self).__init__(topics)
    
 

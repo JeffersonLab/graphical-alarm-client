@@ -19,8 +19,7 @@ MANAGER = None
 
 PROCESSOR = None
 
-ACTIVEPANE = None
-SHELVEDPANE = None
+MESSENGER = None
 MODEL = None
 TABLE = None
 PROXY = None
@@ -54,6 +53,17 @@ ALARMSTATUS = {
       "rank" : 0, "color" : 'white' , "image" : None, "shelved" : None},
 }
 
+QUICKDURATIONS = {
+   "1" : {
+      "text" : "5 seconds", "seconds" : 5},
+   "2" : {
+      "text" : "1 minute", "seconds" : 60},
+   "3" : {
+      "text" : "1 hour", "seconds": 3600},
+   "4" : {
+      "text" : "1 day", "seconds": 86400}
+}
+
 SOURCEDIR = "./"
  
 def getUser() :
@@ -77,6 +87,11 @@ def MakeBold(label) :
    label.setFont(font)
    
 ####### CREATE PROPERTY ROWS #####
+
+def setMessage(timestamp,message) :
+   getManager().setMessage(timestamp,message)
+
+
 def MakeLabel(text,bold=True) :
    label = QtWidgets.QLabel(text)
    if (bold) :
@@ -146,9 +161,7 @@ def nextRow(widget) :
    widget.row = row
    return(row)
 
-def raiseAndResetDialog(dialog) :
-   print("DIALOG:",dialog)
-   
+def raiseAndResetDialog(dialog) :   
    dialog.show()
    dialog.activateWindow()
    dialog.raise_()
@@ -256,25 +269,12 @@ def FindActiveAlarm(alarmname) :
       found = ACTIVEALARMS[alarmname]
    return(found)
 
+def FindAlarm(alarmname) :
+   found = FindActiveAlarm(alarmname)
+   if (found == None) :
+      found = FindShelvedAlarm(alarmname)
 
-
-
-
-#def AddActiveAlarm(alarm) :
- #  ACTIVELIST[alarm   
-def SetActivePane(frame) :
-   global ACTIVEFRAME
-   ACTIVEFRAME = frame
-   
-def GetActivePane() :
-   return(ACTIVEFRAME)
-
-def SetShelvedPane(frame) :
-   global SHELVEDPANE
-   SHELVEDPANE = frame
-
-def GetSelvedPane() :
-   return(SHELVEDPANE)    
+   return(found)
 
 def SetAlarmList(alarmlist) :
    global ALARMLIST

@@ -22,12 +22,17 @@ from jlab_jaws.avro.subject_schemas.serde import ActiveAlarmSerde, \
    OverriddenAlarmKeySerde
 
 #  REGISTERED ALARMS
-from jlab_jaws.avro.subject_schemas.entities import RegisteredAlarm, \
-   RegisteredClass, RegisteredClassKey, SimpleProducer, EPICSProducer, \
-   CALCProducer,AlarmStateEnum,AlarmStateValue,ShelvedAlarmReason
+from jlab_jaws.avro.subject_schemas.serde import RegisteredAlarmSerde, \
+   RegisteredClassSerde, RegisteredClassKeySerde   
 
-from jlab_jaws.avro.referenced_schemas.entities import AlarmClass, \
-   AlarmLocation, AlarmCategory, AlarmPriority   
+from jlab_jaws.avro.subject_schemas.entities import RegisteredAlarm, RegisteredClass, RegisteredClassKey, \
+    SimpleProducer, EPICSProducer, CALCProducer
+
+from jlab_jaws.avro.referenced_schemas.entities import AlarmClass,\
+   AlarmLocation, AlarmCategory, AlarmPriority
+
+
+
 
 # OVERRIDDEN ALARMS
 from jlab_jaws.avro.subject_schemas.entities import OverriddenAlarmValue, \
@@ -165,36 +170,27 @@ class JAWSConnection(object) :
       self.key_serializer = StringSerializer()
 
       #Initialize connections 
+      
       self.avro_serdes = {
          'registered-alarms' : {
             'serde' : RegisteredAlarmSerde,
-            'key_deserializer' : StringDeserializer('utf_8'),
-            'value_deserializer' : \
-               RegisteredAlarmSerde.deserializer(self.schema_registry),
+            'deserializer' : None,
             'serializer'   : None
          },
          'active-alarms'     : {
             'serde' : ActiveAlarmSerde,
-            'key_deserializer' : None,
-            'value_deserializer' :  \
-               AlarmStateSerde.deserializer(self.schema_registry),
+            'deserializer' : None,
             'serializer'   : None
          },
          'alarm-state' : {
             'serde' : AlarmStateSerde,
-            'key_deserializer' : None,
-            'value_deserializer' : \
-               AlarmStateSerde.deserializer(self.schema_registry),
+            'deserializer' : None,
             'serializer'   : None
-         },
-         'overridden-alarms' : {
-            
-            'key_deserializer' : \
-               OverriddenAlarmKeySerde.deserializer(self.schema_registry),
-            'value_deserializer' : \
-               OverriddenAlarmValueSerde.deserializer(self.schema_registry)
          }
+         #'overridden-alarms' : OverriddenAlarmSerde
       }
+
+
       
          
 
@@ -204,7 +200,7 @@ class JAWSProducer(JAWSConnection) :
        
    """
    #NOTE: Most of this has been stolen from Ryan's examples
-   def __init__(self,topic,name) :
+   def __init__(self,managername,topic) :
       """ Create a JAWSProducer instance
           
           :param topic: Name of topic
@@ -213,29 +209,25 @@ class JAWSProducer(JAWSConnection) :
           :type name: string
       """
       super(JAWSProducer,self).__init__(topic)
-      
+
       topic = self.topic
             
-      topic_config = self.avro_serdes[topic]
-      avro_serde = topic_config['serde']
-      
-      if (topic_config['serializer'] == None) : 
-         topic_config['serializer'] = \
-            avro_serde.serializer(self.schema_registry)
-      
-      self.value_serializer = topic_config['serializer']
-     
-      ts = time.time()
+      self.hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),
+         ('producer',managername),('host',os.uname().nodename)]
+
+   def _create_producer(self) :
+      config = None
+           
       producer_config = {
                 'bootstrap.servers'  : self.bootstrap_servers,
                 'key.serializer'   : self.key_serializer,
                 'value.serializer' : self.value_serializer,
+                
                }
-      self.producer = SerializingProducer(producer_config)
-      self.hdrs = [('user', pwd.getpwuid(os.getuid()).pw_name),
-         ('producer',name),('host',os.uname().nodename)]
-
-   
+      producer = SerializingProducer(producer_config)
+      return(producer)
+      
+      
    def send_message(self,params) :
       """ Send a message to a topic 
           :param params: message content
@@ -249,10 +241,13 @@ class JAWSProducer(JAWSConnection) :
       """
       
       producer = self.producer 
+      
       producer.produce(topic=params.topic,value=params.value,key=params.key,
          headers=self.hdrs,on_delivery=self.delivery_report)
       producer.flush()
    
+      
+
    #Create an acknowledge message
    def ack_message(self,name) :
       """ Create an acknowledgement message
@@ -262,7 +257,7 @@ class JAWSProducer(JAWSConnection) :
   
       """
       #Build the message to pass to producer. 
-      params = self.params
+      params = types.SimpleNamespace()
       params.value = None
       params.key = name
       params.topic = self.topic
@@ -288,7 +283,107 @@ class JAWSProducer(JAWSConnection) :
    
 
    
+class OverrideProducer(JAWSProducer) :
+   def __init__(self,managername,overridetype) :
       
+      super(OverrideProducer,self).__init__(managername,'overridden-alarms')
+      self.topic = 'overridden-alarms'
+      self.key_serializer = \
+         OverriddenAlarmKeySerde.serializer(self.schema_registry)
+      self.value_serializer = \
+         OverriddenAlarmValueSerde.serializer(self.schema_registry)
+      
+      
+      self.overridetype = OverriddenAlarmType[overridetype]
+      self.params = types.SimpleNamespace()
+      
+      self.params.topic = self.topic
+      
+      self.producer = self._create_producer()
+    
+   def disable_message(self,name,comment) :
+      
+      self.params.key = OverriddenAlarmKey(name,self.overridetype)
+      msg = DisabledAlarm(comment)
+      self.params.value = OverriddenAlarmValue(msg)
+      self.send_message()
+     
+  
+  
+   def oneshot_message(self,name,reason,comments) :
+      """ Create OneShot shelving message        
+          :param name: name of alarm
+          :type name: string
+  
+      """
+      self.params.key = OverriddenAlarmKey(name,self.overridetype)
+      msg = ShelvedAlarm(1,comments,ShelvedAlarmReason[reason],True)
+      self.params.value = OverriddenAlarmValue(msg)
+      self.send_message()
+   
+   def shelve_message(self,name,expseconds,reason,comments=None) :
+      print("NAME:",name,"SEC:",expseconds,"RE",reason,"COMMENTS:",comments)
+      
+      now = int(time.time())
+      timestampseconds  = now + expseconds
+      
+      timestampmillies = int(timestampseconds * 1000)
+      
+      
+      
+      self.params.key = OverriddenAlarmKey(name,self.overridetype)
+      msg = ShelvedAlarm(timestampmillies,comments,ShelvedAlarmReason[reason],False)
+      self.params.value = OverriddenAlarmValue(msg)
+      
+      self.send_message()
+      
+      
+   #Create an acknowledge message
+   def ack_message(self,name) :
+      """ Create an acknowledgement message
+          
+          :param name: name of alarm
+          :type name: string
+  
+      """
+      
+      self.params.key = OverriddenAlarmKey(name,self.overridetype)
+      #Build the message to pass to producer. 
+     # params = types.SimpleNamespace()
+      self.params.value = None
+      
+      self.send_message()
+      return
+      
+      
+      #params.key = name
+      #params.topic = self.topic
+      
+      ### FOR TESTING PURPOSES ###
+      ### Until active-alarms/alarm-state/latching works
+      #params.value = AlarmStateValue(AlarmStateEnum['Active'])
+      #print("VAL",params.value)
+      #return
+      #params.topic = "alarm-state"
+      
+      self.send_message(params)
+   
+   def send_message(self) :
+         
+      params = self.params
+      
+     # print("MSG:",params.value)
+      #self.producer = SerializingProducer(producer_config)
+      #self.send_message(params)
+      producer = self.producer 
+      
+      producer.produce(topic=params.topic,value=params.value,key=params.key,
+         headers=self.hdrs,on_delivery=self.delivery_report)
+      producer.flush()
+
+
+
+
 class JAWSConsumer(JAWSConnection) :
    """ JAWSConnection that subscribes to topics and consumes messages 
    """
@@ -313,34 +408,26 @@ class JAWSConsumer(JAWSConnection) :
       super(JAWSConsumer,self).__init__(topic)
       
       self.name = name
+      self.topic = topic
+      self.monitor = monitor
+      self.init_state = init_state
+      self.update_state = update_state
       
-      topic_config = self.avro_serdes[topic]
-      #avro_serde = topic_config['serde']
-      
-      if (topic_config['key_deserializer'] == None) :
-         topic_config['key_deserializer'] = self.key_deserializer 
-         
-         
-      if (topic_config['value_deserializer'] == None) :
-         topic_config['value_deserializer'] = \
-            avro_serde.deserializer(self.schema_registry)
-      
-      self.key_deserializer = topic_config['key_deserializer']
-      self.value_deserializer = topic_config['value_deserializer']
-      
+   def _create_event_table(self) :
       ts = time.time()
-      consumer_config = {'topic': topic,
-                'monitor' : monitor,
-                'bootstrap.servers'  : self.bootstrap_servers,
-                'key.deserializer'   : self.key_deserializer,
-                'value.deserializer' : self.value_deserializer,
-                'group.id' : self.name + " " + str(ts)
-               }
+      print("***<",self.name,">") # + str(ts))
+      consumer_config = {
+         'topic': self.topic,
+         'monitor' : self.monitor,
+         'bootstrap.servers'  : self.bootstrap_servers,
+         'key.deserializer'   : self.key_deserializer,
+         'value.deserializer' : self.value_deserializer,
+         'group.id' : self.name + " " + str(ts)
+      }
       
       self.event_table = \
-         EventSourceTable(consumer_config,init_state,update_state)
-
-   
+         EventSourceTable(consumer_config,self.init_state,self.update_state)
+  
    def start(self) :
       """ Start the event_table monitoring
       """
@@ -351,4 +438,44 @@ class JAWSConsumer(JAWSConnection) :
       """ Stop the event_table
       """
       self.event_table.stop()
+
+class AlarmStateConsumer(JAWSConsumer) :
+   def __init__(self,init_state,update_state,name,monitor=True) :
+      super(AlarmStateConsumer,self).__init__('alarm-state',
+         init_state,update_state,name, monitor)
+      
+      self.key_deserializer = StringDeserializer()
+      self.value_deserializer = \
+         AlarmStateSerde.deserializer(self.schema_registry)
+         
+      self._create_event_table()
+      
+class RegisteredAlarmsConsumer(JAWSConsumer) :
+   def __init__(self,init_state,update_state,name,monitor=True) :
+      super(RegisteredAlarmsConsumer,self).__init__('registered-alarms',
+         init_state,update_state,name, monitor)
+      
+      self.key_deserializer = StringDeserializer('utf_8')
+      self.value_deserializer = \
+          RegisteredAlarmSerde.deserializer(self.schema_registry)
+      
+      self.classes_key_deserializer = \
+         RegisteredClassKeySerde.deserializer(self.schema_registry) 
+      
+      self.classes_value_deserializer = \
+         RegisteredClassSerde.deserializer(self.schema_registry)
+
+      self._create_event_table()
+
+class ActiveAlarmsConsumer(JAWSConsumer) :
+   def __init__(self,init_state,update_state,name,monitor=True) :
+      
+      super(ActiveAlarmsConsumer,self).__init__('active-alarms',
+         init_state,update_state,name, monitor)
+      
+      self.key_deserializer = StringDeserializer()
+      self.value_deserializer = \
+         ActiveAlarmSerde.deserializer(self.schema_registry)
+
+      self._create_event_table()
       

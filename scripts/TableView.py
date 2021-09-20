@@ -1,7 +1,3 @@
-#NOTE ABOUT METHOD AND VARIABLE NAMES
-# --- self.myvariable     -- variable for this application
-# --- def MyMethod()      -- method implemented for this application
-# --- def libraryMethod() -- method accessed from a python library
 
 #Contains the AlarmTable and the AlarmModel
 
@@ -104,6 +100,7 @@ class TableView(QtWidgets.QTableView) :
    #User can acknowledge the selected alarms
    def AddPropertyAction(self,menu) :
       alarm = self.getSelectedAlarms()[0]
+      
       PropertyAction(menu,alarm).addAction()
   
    #User can also shelve selected alarms
@@ -126,22 +123,43 @@ class AlarmTable(TableView) :
    def contextMenuEvent(self,event) :
       
       menu = QtWidgets.QMenu(self)  
-                 
-      self.AddAckAction(menu)
-      self.AddOneShotAction(menu)
-      self.AddPropertyAction(menu)
-      action = menu.exec_(self.mapToGlobal(event.pos()))
-      if (action != None) :
-         action.performAction()
-   
-   def AddOneShotAction(self,menu) :
-      OneShotAction(menu).addAction()
       
+      #TitleAction is a placeholder for the title of the context menu
+      self.AddTitleAction(menu)
+      
+      #separator between the title and actions.
+      separatorbg = "background: red"   
+      style = "QMenu::separator {background: red;}"
+      menu.setStyleSheet(style)
+      separator = menu.addSeparator()
+      
+      self.mainmenu = menu
+      
+      self.AddAckAction(menu)
+      self.AddPropertyAction(menu)
+      self.AddOverrideAction(menu)
+      
+      action = self.performAction(event)
+      
+      if (action != None) :        
+         action.performAction(self.getSelectedAlarms())
+   
+   def performAction(self,event) :
+      #Not sure why (ugh) but if the menu calls 
+      #mapToGlobal directly, the focus remains on the 
+      #AlarmTable...instead of the potential dialog
+      action = self.mainmenu.exec_(self.mapToGlobal(event.pos()))
+      return(action)
+      
+   def AddTitleAction(self,menu) :
+      TitleAction(menu).addAction()
+   
+   def AddOverrideAction(self,menu) :
+      OverrideAction(menu).addAction()
+
    #User can acknowledge the selected alarms
    def AddAckAction(self,menu) :
-      #print("**",AckAction(menu))
       AckAction(menu).addAction()
-
 
 #The latched and status column (col=0, col=1) 
 #Displays the status indicators.

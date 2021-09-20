@@ -281,7 +281,8 @@ class AlarmModel(ModelView) :
             return(alarm.get_property('category',name=True))
          if (col == self.GetColumnIndex('location')) :
             return(alarm.get_property('location',name=True))  
-   
+         if (col == self.GetColumnIndex('priority')) :
+            return(alarm.get_property('priority',name=True))
    
    def get_sevrDisplay(self,alarm) :
       

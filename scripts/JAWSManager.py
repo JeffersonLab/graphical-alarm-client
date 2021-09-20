@@ -39,6 +39,7 @@ class ToolBar(QtWidgets.QToolBar) :
       
       removefilter = RemoveFilterAction(self).addAction()
       self.removefilter = removefilter
+      
    
    #Access to the Remove Filter action button
    def getRemoveFilterAction(self) :
@@ -50,7 +51,27 @@ class ToolBar(QtWidgets.QToolBar) :
          action.configToolBarAction()
       
 
-#Only one widget for a main window
+#NOT IMPLEMENTED YET
+class JAWSMessenger(QtWidgets.QWidget) :
+   def __init__(self,parent=None,*args,**kwargs) :
+      super(JAWSMessenger,self).__init__(parent,*args,**kwargs)
+      
+      layout = QtWidgets.QHBoxLayout()
+      self.timestamp = QtWidgets.QLabel()
+      self.timestamp.setFixedWidth(10)
+      layout.addWidget(self.timestamp) 
+      
+      self.message = QtWidgets.QLabel()
+      layout.addWidget(self.message)
+      
+      self.setLayout(layout)
+   
+   def setMessage(self,timestamp,message) :
+      self.timestamp.setText(timestamp)
+      self.message.setText(message)   
+      
+      
+#only one widget for a main window
 class JAWSManager(QtWidgets.QMainWindow) :
    def __init__(self,title,type,*args,**kwargs) :
       super(JAWSManager,self).__init__(*args,**kwargs)
@@ -61,7 +82,8 @@ class JAWSManager(QtWidgets.QMainWindow) :
       self.type = type  #Manager type
       self.data = []    #alarm data
       self.filters = [] #available alarm filters
-   
+      
+      self.consumer_dict = {}
       self.consumers = []
       self.overridedialog = None   #dialog displaying suppression options
       self.prefdialog = None    #dialog displaying preferences
@@ -86,7 +108,9 @@ class JAWSManager(QtWidgets.QMainWindow) :
       menubar = self.createMenuBar()
       layout.addWidget(menubar)      
       layout.addWidget(self.tableview)
-     
+      
+    #  self.messenger = JAWSMessenger()      
+     # layout.addWidget(self.messenger)
       ############   NEEDS TO BE EXERCISED BEFORE REMOVAL 
       #Total misnomer. This command grows and shrinks the main window
       #when the table rows are added or removed. Also allows for the
@@ -102,13 +126,12 @@ class JAWSManager(QtWidgets.QMainWindow) :
       #We will use the widget later to resize the MainWindow
       self.widget = widget
       
-      #Capture ctrl-c for quitting.
-      QtWidgets.QShortcut("Ctrl+C", self, activated=self.closeEvent)
         
       #Show the results
       self.setCentralWidget(widget)
       self.show()
       
+ 
       #Initial configuration based on prefs and alarm
       #status
       self.initConfig()
@@ -121,7 +144,11 @@ class JAWSManager(QtWidgets.QMainWindow) :
       
       #Initialize the size of the main gui
       self.setSize()
+   
+   def setMessage(self,timestamp,message) :
+      self.messenger.setMessage(timestamp,message)
       
+         
    ### THE FOLLOWING METHODS DEAL WITH THREADING
    
    #Create and start the worker.
@@ -142,14 +169,24 @@ class JAWSManager(QtWidgets.QMainWindow) :
          self.threadpool.start(worker)
          self.workerthreads[topic] = worker
          
-   
+
    #Create a consumer for the topic  
    def createConsumer(self,topic) :
-     
-      #The JAWSConsumer includes the event table, which will be
-      #the thread.
-      consumer = JAWSConsumer(topic,self.initMessages,
-         self.updateMessages,self.type)
+      
+      if (topic == 'active-alarms') :
+         consumer = ActiveAlarmsConsumer(self.initMessages,
+            self.updateMessages,self.type)
+      elif (topic == 'alarm-state') :
+         consumer = AlarmStateConsumer(self.initMessages,
+            self.updateMessages,self.type)
+      elif (topic == 'registered-alarms') :
+         consumer = RegisteredAlarmsConsumer(self.initMessages,
+            self.updateMessages,self.type)
+      else :
+         #The JAWSConsumer includes the event table, which will be
+         #the thread.
+         consumer = JAWSConsumer(topic,self.initMessages,
+            self.updateMessages,self.type)
       
       self.consumers.append(consumer)
       #Start the consumer 
@@ -189,7 +226,8 @@ class JAWSManager(QtWidgets.QMainWindow) :
             elif (re.search("shelved",state) != None) :
                getModel().removeAlarm(alarm)
             else :
-               print(state, "NOT YET HANDLED")
+               
+               getModel().removeAlarm(alarm)
          else :
             getModel().removeAlarm(alarm)
            
@@ -379,9 +417,11 @@ class JAWSManager(QtWidgets.QMainWindow) :
       return(self.prefdialog)
         
    #Create a dialog for overriding an alarm. Common to children
-   def createOverrideDialog(self) :
+   def createOverrideDialog(self,selectedalarms=None) :
+      
       if (self.overridedialog == None) :
-         self.overridedialog = OverrideDialog()
+         self.overridedialog = OverrideDialog(selectedalarms)
+      self.overridedialog.setSelection(selectedalarms)
       return(self.overridedialog)   
 
    #Adjust the size of the main gui when alarms are added/removed

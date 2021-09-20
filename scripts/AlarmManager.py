@@ -3,6 +3,8 @@
    :synopsis : JAWSManager that displays active alarms
 .. moduleauthor:: Michele Joyce <erb@jlab.org>
 """
+from signal import signal, SIGINT
+from sys import exit
 
 from JAWSManager import *
 from jlab_jaws_helper.JAWSProcessor import *
@@ -14,7 +16,7 @@ Column definitions for an AlarmManager
 """
 COLUMNS = {
      'type' :  {'size' : 75, 'filter' : TypeFilter,'settings' : None},
-     'priority' : {'size' : 55, 'filter' : PriorityFilter,'settings' : None},
+     'priority' : {'size' : 175, 'filter' : PriorityFilter,'settings' : None},
      'status' : {'size': 75, 'filter' : StatusFilter,'settings' : None},
      'name' : {'size' : 200},
      'timestamp': {'size': 150, 'settings' : None, 'sortorder': 1},  
@@ -76,11 +78,12 @@ class AlarmManager(JAWSManager) :
           :param alarm: alarm to display
           :type alarm : JAWSALARM
       """
-      print("CREATE PROP DIaLOG FOR",alarm.get_name())
+      
       name = alarm.get_name()
       if (name in self.propdialogs) :
          propertydialog = self.propdialogs[name]
       else :
+         
          propertydialog = AlarmPropertyDialog(alarm,self)
          self.propdialogs[name] = propertydialog
          
@@ -114,6 +117,7 @@ class AlarmToolBar(ToolBar) :
       overrideaction = OverrideAction(self).addAction()
       self.actionlist.append(overrideaction)
       
+      
    
 class AlarmMenuBar(QtWidgets.QMenuBar) :
    """ Menubar specific to the AlarmManager
@@ -141,8 +145,14 @@ class AlarmMenuBar(QtWidgets.QMenuBar) :
       """
       command = "python3 " + SOURCEDIR + "ShelfManager.py &"
       os.system(command)
+ 
       
+def handler(signal_received,frame) :
+   print("FRAME:",frame)
+   print('SIGINT or CTRL-C detected.Exiting gracefully')
+   
 
+   
 app = QtWidgets.QApplication(sys.argv)
 window = AlarmManager()
 app.exec()

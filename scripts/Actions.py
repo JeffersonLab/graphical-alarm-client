@@ -16,45 +16,51 @@ class Action(QtWidgets.QAction) :
    def __init__(self,parent,*args,**kwargs) :
       super(Action,self).__init__(parent,*args,**kwargs)
       """ Create an action
-       
-         :param parent: parent widget
-         :type parent: QMenu or QToolbar
+         
+         Args:
+            parent (widget) : parent widget
       
       """    
       #Inherited action passes in configuration information
-      self.parent = parent      
-
-      self.setIcon(self.icon)              
-      self.setIconText(self.text)      
-      self.setToolTip(self.tip)
+      self.parent = parent            
+      
+      if (self.icon != None) :
+         self.setIcon(self.icon)              
+      
+      if (self.text != None) :
+         self.setIconText(self.text)      
+      if (self.tip != None) :
+         self.setToolTip(self.tip)
       
       self.triggered.connect(self.performAction)
       
-   #Configure the toolbar actions. 
-   #This subroutine can be overwritten by inherited actions.
+ 
    def configToolBarAction(self) :
+      """  Configure the toolbar actions. 
+           This subroutine can be overwritten by inherited actions.
+      """
       pass
    
    def getSelectedAlarms(self) :
       """ 
          Get the list of alarms that have been selected on the table
-         :returns list of JAWSAlarms
+         Returns:
+            list of JAWSAlarms
       """      
       return(getTable().getSelectedAlarms())
    
    def getSelectedAlarm(self) :
       """ 
          Get the single selected alarm 
-         :returns JAWSAlarm
+         Returns:
+            JAWSAlarm
       """      
       return(getTable().getSelectedAlarm())
-      
-      
+            
    def addAction(self) :
       """ 
          Add an action. 
-         Action may be added to a contextmenu, or toolbarCreate an action
-      
+         Action may be added to a contextmenu, or toolbar     
       """    
 
       #If this isn't a menu, add it to the parent and return
@@ -79,33 +85,62 @@ class Action(QtWidgets.QAction) :
          Default validity check. Valid if at least one alarm is selected.
          NOTE: Can be overridden by children
          
-         returns: valid/invalid 
+         Returns: (bool) 
+            valid/invalid 
       """
       valid = True
       if (len(self.getSelectedAlarms()) == 0) :
          valid = False
       return(valid)
    
-   #Default text depends on the action's "actionword" and
-   #the number of alarms selected.
-   #Can be overridden by children
+   def performAction(self) :      
+      """ Children must implement
+      """
+      pass
+      
    def getText(self) :
       """ 
-         Default validity check. Valid if at least one alarm is selected.
+         Default text depends on the action's "actionword" and
+         the number of alarms selected.
          NOTE: Can be overridden by children
-      
-         returns: menu/button text
+         
+         Returns :
+            text for action
+
       """
-      
       actionword = self.actionword
-      text = actionword + " Selected"
-      alarmlist = self.getSelectedAlarms()
-      if (len(self.getSelectedAlarms()) == 1) :
-         text = actionword + ": " + self.getSelectedAlarm().get_name()      
+      text = actionword 
       return(text)
+
+
+
+class TitleAction(Action) :
+   """ Dummy action used to control title of contextmenu
+   """
+   def __init__(self,parent,*args,**kwargs) :
+      """
+         Parameters:
+            parent (menu) : parent menu          
+      """     
+      
+      self.icon = None
+      self.text = None
+      self.tip = None
+      
+      super(TitleAction,self).__init__(parent,*args,**kwargs)
+   
+   def getText(self) :
+      """ Text dependent on number of alarms that have been selected in the table
+          Returns:
+            title for action
+      """
+      title = "Selected Alarms"
+      alarms = getTable().getSelectedAlarms()
+      if (len(alarms) == 1) :
+         title = alarms[0].get_name()
+      return(title)
   
-#Display user preferences. 
-#This action is added to the toolbar, as well as the "file" menu
+
 class PrefAction(Action) :
    """ Display user preferences
        NOTE: This action is added to the toolbar as well as the file menu
@@ -114,8 +149,8 @@ class PrefAction(Action) :
    def __init__(self,parent,*args,**kwargs) :
       """
          Create an instance
-         :param parent: parent widget
-         :type parent: QMenu or QToolbar
+         Args:
+            parent: QMenu or QToolbar 
       """
         
       self.icon = QtGui.QIcon("gear.png")
@@ -126,18 +161,21 @@ class PrefAction(Action) :
    
    #Invoke the preferences dialog.
    def performAction(self) :
-      """ Display the user preferences dialog """
-           
+      """ Display the user preferences dialog """           
       dialog = getManager().createPrefDialog()
       raiseAndResetDialog(dialog)
-      
-      
-#OverrideAction 
-#Display the override configuration dialog.
+ 
+ 
 class OverrideAction(Action) :
+   """ Display override option dialog
+   """
    def __init__(self,parent,text="Override Selected",*args,**kwargs) :
-      #Define the action's configuration       
-      self.icon = QtGui.QIcon("ssh")
+      """
+         Create an instance
+         Args:
+            parent: QMenu or QToolbar 
+      """
+      self.icon = QtGui.QIcon("cross-circle.png")
       self.text = "Override Alarms"
       self.tip = "Override Alarms"
       
@@ -147,7 +185,7 @@ class OverrideAction(Action) :
    def configToolBarAction(self) :
       """  The action is only available,if at least one alarm is 
            being displayed
-      """        
+      """           
       if (self.actionValid()) :
          self.setEnabled(True)
       else :
@@ -159,18 +197,25 @@ class OverrideAction(Action) :
          returns: valid/invalid 
       """
       valid = True ### TESTING
-      #if (getModel().rowCount(0) == 0) :
-      #   valid = False
+      if (getModel().rowCount(0) == 0) :
+         valid = False
       return(valid)
    
    #Create/show the OverrideDialog
-   def performAction(self) :
+   def performAction(self,selectedalarms=None) :
       
       #Has a overridedialog already been created?
-      dialog = getManager().createOverrideDialog()
-       
+      dialog = getManager().createOverrideDialog(None)
+ 
       #pop
-      raiseAndResetDialog(dialog)      
+      raiseAndResetDialog(dialog)   
+      
+      #If called from the context menu, pre-populate the search box for the
+      #dialog
+      if (selectedalarms and len(selectedalarms) > 0) :
+         dialog.setSelection(selectedalarms)   
+
+      
       
 class RemoveFilterAction(Action) :
    """
@@ -180,7 +225,12 @@ class RemoveFilterAction(Action) :
       The button is disabled if there are no filters applied to the table
    """
    def __init__(self,parent=None,*args,**kwargs) :
-      
+      """
+         Create an instance
+         Args:
+            parent: QToolbar 
+      """
+            
       self.icon = QtGui.QIcon("funnel--minus.png")
       self.text = "Remove Filters"
       self.tip = "Remove all Filters"
@@ -242,17 +292,17 @@ class PropertyAction(Action) :
    def __init__(self,parent,text="Properties",*args,**kwargs) :
       """ 
          Create an instance
-         :param parent: parent widget
-         :type parent: QMenu or QToolbar
-         :param text: Text to be displayed on the parent
-         :type text: string (default = "Properties")
+         
+         Args:
+            parent: QMenu or QToolbar
+            text: string (default = "Properties")
      
       """
       #Define the action's configuration          
-      self.icon = QtGui.QIcon("application-list.png")
+      self.icon = QtGui.QIcon("property-blue.png")
       self.text = "Properties"
       self.tip = "Alarm Properties"
-      
+      self.actionword = "Properties"
       #Now call the parent.
       super(PropertyAction,self).__init__(parent,*args,**kwargs)
    
@@ -260,51 +310,161 @@ class PropertyAction(Action) :
    def configToolBarAction(self) :
       """  The action is only available, if ONE alarm is selected. """        
       alarmlist = self.getSelectedAlarms()
+      self.setEnabled(True)
+      
       if (len(alarmlist) == 1) :
          self.setEnabled(True)
       else :
          self.setEnabled(False)
    
-   def performAction(self) :
+   def performAction(self,alarmlist = None) :
       """ Show the alarm's property dialog """
+      
       alarm = self.getSelectedAlarms()[0]
       dialog = getManager().createPropertyDialog(alarm)
       #pop
-      raiseAndResetDialog(dialog)      
-
+      raiseAndResetDialog(dialog)    
+      
   
    def actionValid(self) :
-      """ Action only valid if one, and only one alarm has been selected. """      
+      """ Action only valid if one, and only one alarm has been selected. 
+          Returns:
+            True/False
+      """      
       valid = True
       num = len(self.getSelectedAlarms())
       if (num != 1) :
          valid = False
       return(valid)
    
-   def getText(self) :
-      """ Text for menu item  """
-      text = "Properties: " + self.getSelectedAlarm().get_name()
-      return(text)
 
 class OneShotAction(Action) :
-   def __init__(self,parent,text="One Shot Shelved",*args,**kwargs) :
+   """ OneShot override """
+   
+   def __init__(self,parent,text="One Shot Override",*args,**kwargs) :
+      """ 
+         Create an instance
+         
+         Args:
+            parent: QMenu,QToolbar, or None
+            text: string (default = "One Shot Override")
+     
+      """
+  
       self.icon = QtGui.QIcon("hourglass--arrow.png")
       self.text = text
       self.tip = "OneShot"
       self.actionword = "OneShot Shelve"
-      super(OneShotAction,self).__init__(parent,*args,**args)
+      super(OneShotAction,self).__init__(parent,*args,**kwargs)
       
    
-   def performAction(self) :            
-      """ One Shot """
-      producer = JAWSProducer('active-alarms',getManager().type)
+   def performAction(self,reason,comments=None,alarmlist=None) :                
+      """ 
+         One Shot Override
+         Args:
+            reason (enum)    : official reason for override
+            comments (str)   : optional free form comments
+            alarmlist (list) : optional list of alarms to override
+      """
+      if (reason == None) :
+         reason = "Other"
       
-      alarmlist = self.getAlarmsToBeAcknowledged()
-      print("ALARMS:",alarmlist)
+      #Create an OverrideProducer to send message to overridden topic
+      #Create an ackproducer too. Until state processor fixed to remove
+      #latch if shelved
+      oneshotproducer = OverrideProducer(getManager().type,'Shelved')
+      ackproducer = OverrideProducer(getManager().type,'Latched')
+      
+      if (alarmlist == None) :
+         alarmlist = self.getSelectedAlarms()
+      
+      #Send the messages for each alarm.
       for alarm in alarmlist :
-         #self.acknowledgeAlarm(alarm.get_name(),producer)
-         producer.ack_message(alarm.get_name())
+         oneshotproducer.oneshot_message(alarm.get_name(),reason,comments)
+         ackproducer.ack_message(alarm.get_name())
 
+class DisableAction(Action) :
+   """ Disabled override """
+   
+   def __init__(self,parent,text="Disable",*args,**kwargs) :
+      """ 
+         Create an instance       
+         Args:
+            parent: QMenu,QToolbar, or None
+            text: string (default = "Disable")     
+      """
+      self.icon = QtGui.QIcon("cross-circle.png")
+      self.text = text
+      self.tip = "Disable"
+      self.actionword = "Disable"
+      super(DisableAction,self).__init__(parent,*args,**kwargs)
+   
+   def performAction(self,comments=None,alarmlist=None) : 
+      """ 
+         Disable Override
+         Args:
+            comments (str)   : optional free form comments
+            alarmlist (list) : optional list of alarms to override
+      """
+      
+      #Create an OverrideProducer to send message to overridden topic
+      #Create an ackproducer too. Until state processor fixed to remove
+      #latch if shelved
+      disableproducer = OverrideProducer(getManager().type,"Disabled")
+      ackproducer = OverrideProducer(getManager().type,'Latched')
+      
+      if (alarmlist == None) :
+         alarmlist = self.getSelectedAlarms()
+      
+      if (not alarmlist) :
+         return
+      
+      #Disable each alarm in the list.
+      for alarm in alarmlist :
+         disableproducer.disable_message(alarm.get_name(),comments)
+         ackproducer.ack_message(alarm.get_name())
+
+  
+class TimedOverrideAction(Action) :
+   """ Time override (Shelved) """
+   
+   def __init__(self,parent,seconds,text="Timed Shelving",*args,**kwargs) :
+      """ 
+         Create an instance       
+         Args:
+            parent: QMenu,QToolbar, or None
+            text: string (default = "Timed Shelving")   
+            seconds (int) : number of seconds to override
+      """
+      self.icon = QtGui.QIcon("alarm-clock--arrow.png")
+      self.text = text
+      self.tip = "Shelving"
+      self.actionword = "Timed Shelving"
+      
+      self.expirationseconds = seconds     
+      super(TimedOverrideAction,self).__init__(parent,*args,**kwargs)
+   
+   def performAction(self,reason,comments=None,alarmlist=None) : 
+      """ 
+         Timed override (Shelved)
+         Args:
+            reason           : official reason for override
+            comments (str)   : optional free form comments
+            alarmlist (list) : optional list of alarms to override
+      """     
+      shelfproducer = OverrideProducer(getManager().type,'Shelved')
+      ackproducer = OverrideProducer(getManager().type,'Latched')
+      
+      
+      if (alarmlist == None) :
+         alarmlist = self.getSelectedAlarms()
+      if (not alarmlist) :
+         return
+      
+      for alarm in alarmlist :
+         shelfproducer.shelve_message(alarm.get_name(),self.expirationseconds,
+            reason,comments)        
+         ackproducer.ack_message(alarm.get_name())
 
 #Acknowledge Action      
 class AckAction(Action) :
@@ -312,14 +472,11 @@ class AckAction(Action) :
    
    def __init__(self,parent,text="Acknowledge Alarms",*args,**kwargs) :
       """ 
-         Create an instance
-         :param parent: parent widget
-         :type parent: QMenu or QToolbar
-         :param text: Text to be displayed on the parent
-         :type text: string (default = "Acknowledge Alarms")
-     
-      """
-   
+         Create an instance       
+         Args:
+            parent: QMenu,QToolbar, or None
+            text: string (default = "Ackowledge Alarms")            
+      """ 
       self.icon = QtGui.QIcon("tick-circle-frame.png")
       self.text = text
       self.tip = "Acknowledge"
@@ -329,7 +486,11 @@ class AckAction(Action) :
      
    
    def getAlarmsToBeAcknowledged(self) :
-      """ Determine which selected alarms need to be acknowledged """
+      """ 
+         Determine which selected alarms need to be acknowledged 
+         Returns:
+            list of alarms to be acknowledged
+      """
       alarmlist = self.getSelectedAlarms()
       
       #Only those with a latch severity make the cut
@@ -343,6 +504,8 @@ class AckAction(Action) :
    def actionValid(self) :
       """ Action is only valid if there is at least one alarm that
           needs to be acknowledged
+          Returns:
+            True/False
       """
       valid = False
       needsack = self.getAlarmsToBeAcknowledged()
@@ -354,30 +517,21 @@ class AckAction(Action) :
    def configToolBarAction(self) :
       """ Configure the toolbar button as appropriate """
       alarmlist = self.getAlarmsToBeAcknowledged()
-      
+      self.setEnabled(True)
+ 
       if (len(alarmlist) == 0) :
          self.setEnabled(False)
       else :
          self.setEnabled(True)
    
    def performAction(self) :            
-      """ Acknowledge the list of alarms """
-      producer = JAWSProducer('active-alarms',getManager().type)
-      
-      alarmlist = self.getAlarmsToBeAcknowledged()
-    
-      for alarm in alarmlist :
-         #self.acknowledgeAlarm(alarm.get_name(),producer)
+      """ Acknowledge the list of alarms """     
+      producer = OverrideProducer(getManager().type,'Latched')      
+      alarmlist = self.getSelectedAlarms()      
+      for alarm in alarmlist :        
          producer.ack_message(alarm.get_name())
-   
-   def acknowledgeAlarm(self,alarmname,producer=None) :
-      if (producer == None) :
-         producer = JAWSProducer('active-alarms',getManager().type)
-         
-         ##### FOR TESTING PURPOSES ONLY Until active-alarms, alarm-state 
-      
-      producer.ack_message(alarmname)
-      
+
+     
    
 #UnShelve selected alarm/alarms      
 class UnShelveAction(Action) :

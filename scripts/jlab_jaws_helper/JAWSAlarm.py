@@ -70,7 +70,8 @@ class JAWSAlarm(object) :
           :param msg : topic messge
           :type msg: 'cimpl.Message' (can be None) 
       
-      """     
+      """   
+        
       msginfo = get_msg_value(msg) 
       timestamp = get_msg_timestamp(msg) 
       
@@ -82,6 +83,7 @@ class JAWSAlarm(object) :
       }
       if (msginfo != None) :
          dict = msginfo.msg.__dict__
+         
          #include the time that the state changed.
          dict['statechange'] = timestamp      
       else :
