@@ -28,34 +28,65 @@ class JAWSAlarm(object) :
       self.name = name      
       self.config = {}
       
-      
       #If the msg is from a topic other than registered alarms,
       #create an alarm to be defined when the registered alarm comes in.
       if (msg == None) : 
          return   
       
-      timestamp = get_msg_timestamp(msg)  
+      self.add_headers(msg)
       
-      self.config = {
-         'type' : AlarmStateEnum.Normal,  ##This is really the state
-         'registered' : timestamp
-      }               
+      timestamp = get_msg_timestamp(msg)  
+      self.config['type'] = {
+         'state' : AlarmStateEnum.Normal, 
+         'registered' : timestamp,
+         'timeleft'   : None
+      }       
+      
       self._configure_alarm(get_msg_value(msg).__dict__)
+   
+   def calc_time_left(self) :
+      
+      alarm = self
+      timeleft = None
+      exp = self.get_property("expiration")
+      if (exp != None) :
+         now = convert_timestamp(int(time.time()) * 1000)
+         if (now < exp) :
+            timeleft = exp - now
+      
+      self._set_time_left(timeleft)
+     
+      return(self)
 
+   
+   def _set_time_left(self,timeleft) :
+      self.config['timeleft'] = timeleft
+   
    def _configure_alarm(self,config) :
       """ Configure the alarm with the data from a topic
        
          :param config : alarm configuration from topic
          :type config : dict
       
-      """     
-       
+      """   
+      debug = False  
+      if (self.get_name() != "alarm1") :
+         debug = True
+         return
+     
       #Assign each key of the incoming configuration, to the
       #alarm. This is how the alarm is built up from any topic.
       if (config != None) :         
          for key in config :
             self.config[key] = config[key]
-      #return
+            if (key == "producer") :
+               self.config['trigger'] = self.get_producer()
+            if (key == "state") :
+               self.config['state'] = self.get_state()
+    #  if (self.get_name() != "alarm1") :
+         
+     #    return
+      
       #Debug purposes
       if (self.get_name() != None) :
          print(self.get_name())
@@ -63,7 +94,16 @@ class JAWSAlarm(object) :
          for key in self.config :
             print("  ",key,"=>",self.config[key])  
          print("--") 
-         
+   
+   def print_alarm(self) :
+      if (self.get_name() != None) :
+         print(self.get_name())
+      
+         for key in self.config :
+            print("  ",key,"=>",self.config[key])  
+         print("--") 
+  
+  
    def update_active(self,msg) :
       """ Update an alarm from the active-alarms topic
        
@@ -71,7 +111,6 @@ class JAWSAlarm(object) :
           :type msg: 'cimpl.Message' (can be None) 
       
       """   
-        
       msginfo = get_msg_value(msg) 
       timestamp = get_msg_timestamp(msg) 
       
@@ -92,7 +131,60 @@ class JAWSAlarm(object) :
       #Update the alarm's configuration
       self._configure_alarm(dict)
       
+   def update_override(self,msg) :
       
+      msginfo = get_msg_value(msg) 
+      timestamp = get_msg_timestamp(msg)
+      key = get_msg_key(msg)
+      msginfo = get_msg_value(msg)
+      
+      clear = {
+         'override_date' : None,
+         'override_type' : None,   
+         'oneshot'       : None,
+         'expiration'    : None,
+      }
+      
+      if (msginfo != None) :
+         dict = msginfo.msg.__dict__
+         dict['override_date'] = timestamp
+         dict['override_type'] = key.type.name
+         
+ 
+         if ("oneshot" in dict and dict['oneshot']) :
+            dict['override_type'] = "Oneshot " + key.type.name
+            dict['expiration'] = None
+         
+         elif ("expiration" in dict) :
+            dict['expiration'] = convert_timestamp(dict['expiration'])
+         
+         headers = self.add_headers(msg)
+         dict['overridden_by'] = headers['user']
+
+      else :
+         dict = clear
+           
+      self._configure_alarm(dict)
+      
+         
+   def add_headers(self,msg) :
+      
+      
+      headers = get_headers(msg)
+      
+      headerdict = {}
+      if (headers is not None) :
+         for header in headers :
+            var = header[0]
+            
+            if (var == "producer") :
+               var = "app"
+               
+            val = header[1].decode() #bytez.decode()header[1]
+            headerdict[var] = val
+      return(headerdict)    
+   
+   
    def update_state(self,msg) :
       """ Update an alarm from the state topic
        
@@ -102,11 +194,14 @@ class JAWSAlarm(object) :
       """     
       msginfo = get_msg_value(msg)     
       timestamp = get_msg_timestamp(msg) 
-      
+
       dict = msginfo.__dict__
+     
       dict['statechange'] = timestamp      
       self._configure_alarm(dict)
-      
+    
+  
+  
    #Update a registered alarm.
    def update_alarm(self,msg) :
       """ Update an alarm from the registered-alarms topic
@@ -115,16 +210,16 @@ class JAWSAlarm(object) :
        :type msg: 'cimpl.Message' (can be None) 
       
       """  
-      if (self.get_name() == "latchin1") :   
-         print("UPDATE ALaRM",self.get_name(),get_msg_value(msg))
       
       if (msg == None) : ## ***** NEED TO TEST REMOVE REGISTERED 
          return
+
       timestamp = get_msg_timestamp(msg)
       
       if (get_msg_value(msg) == None) :
          self.config['removed'] = timestamp
-         self.config['type'] = None
+         
+         #self.config['type'] = None
          return
       
       
@@ -166,7 +261,7 @@ class JAWSAlarm(object) :
       state = self.get_state(name=True)
       sevr = self.get_sevr(name=True)
       latching = self.get_latching()
-      print(self.get_name(),"STATE:",state,"SEVR:",sevr,"LATHING",latching)
+      
    
    def get_state(self,name=False,value=False) :      
       """ Get the current state of an alarm
@@ -197,15 +292,14 @@ class JAWSAlarm(object) :
        
       """           
       state = self.get_state(name=True)
+      
       val = self.get_property('sevr',name,value)
       if (val == None and not "normal" in state) :
          val = "ALARM"
-      
-      
       return(val)
       
     
-   def get_property(self,property,name=False,value=False) :
+   def get_property(self,alarmproperty,name=False,value=False) :
       """ Generic fetcher for property
                     
        :param property : property of interest
@@ -213,16 +307,21 @@ class JAWSAlarm(object) :
        :param name : return the string name of the property
        :param value: return the numeric value of the property
        
-      """          
-      val = self.get_val(property)
+      """         
+ 
+      debug = False
+      val = self.get_val(alarmproperty)
       if (val != None) :
+         if (isinstance(val,str) or isinstance(val,int) or isinstance(val,dict)) :
+        
+            return(val)
          if (name) :
             return(val.name)
          elif (value) :
             return(val.value)
       return(val)        
   
-   def get_val(self,property) :
+   def get_val(self,alarmproperty) :
       """ Generic fetcher for property
                     
        :param property : property of interest
@@ -230,6 +329,8 @@ class JAWSAlarm(object) :
        
       """                  
       val = None
-      if (self.config != None and property in self.config) :
-         val = self.config[property]
+      if (alarmproperty == "name") :
+         return(self.get_name())
+      if (self.config != None and alarmproperty in self.config) :
+         val = self.config[alarmproperty]
       return(val)

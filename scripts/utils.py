@@ -51,6 +51,12 @@ ALARMSTATUS = {
       "rank" : 2 ,"color" : 'white' , "image" : None} ,
    "NO_ALARM"  : {
       "rank" : 0, "color" : 'white' , "image" : None, "shelved" : None},
+      
+      
+   "NORMAL"  : {
+      "rank" : 4, "color" : 'green' , "image" : None, "shelved" : None},
+    
+      
 }
 
 QUICKDURATIONS = {
@@ -65,6 +71,9 @@ QUICKDURATIONS = {
 }
 
 SOURCEDIR = "./"
+ 
+# cancelbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
+ 
  
 def getUser() :
    return(getpass.getuser())
@@ -86,14 +95,6 @@ def MakeBold(label) :
    font.setBold(True)
    label.setFont(font)
 
-def setGroupBoxStyle(groupbox) :
-   groupbox.setStyleSheet('QGroupBox{font-weight: bold; color: darkRed}')  
-
-def setDialogStyle(dialog) :
-   dialog.setStyleSheet('QDialog{border: 5px solid black;}')   
-
-def setButtonStyle(button) :
-   button.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
 
 
 ####### CREATE PROPERTY ROWS #####
@@ -353,6 +354,6 @@ def getTable() :
 #Create the timestamp for the datafile, using the current time.   
 def TimeStamp() :
    timestamp = datetime.datetime.now()
-  
+   return(timestamp)
    return(timestamp.strftime("%s"))
 

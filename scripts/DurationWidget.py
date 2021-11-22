@@ -16,7 +16,7 @@ class DurationWidget(QtWidgets.QGroupBox) :
             parent : override dialog
       """          
       super(DurationWidget,self).__init__("Override Duration",parent,*args,**kwargs)
-      setGroupBoxStyle(self)
+      getManager().setGroupBoxStyle(self)
       self.durationoptions = []
       layout = QtWidgets.QGridLayout()
       

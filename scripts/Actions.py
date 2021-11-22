@@ -25,8 +25,7 @@ class Action(QtWidgets.QAction) :
       self.parent = parent            
       
       if (self.icon != None) :
-         self.setIcon(self.icon)              
-      
+         self.setIcon(self.icon)                    
       if (self.text != None) :
          self.setIconText(self.text)      
       if (self.tip != None) :
@@ -139,6 +138,11 @@ class TitleAction(Action) :
       if (len(alarms) == 1) :
          title = alarms[0].get_name()
       return(title)
+   
+   def performAction(self,event) :
+      """ Nothing to do here 
+      """
+      return
   
 
 class PrefAction(Action) :
@@ -164,8 +168,8 @@ class PrefAction(Action) :
       """ Display the user preferences dialog """           
       dialog = getManager().createPrefDialog()
       raiseAndResetDialog(dialog)
- 
- 
+
+
 class OverrideAction(Action) :
    """ Display override option dialog
    """
@@ -203,10 +207,10 @@ class OverrideAction(Action) :
    
    #Create/show the OverrideDialog
    def performAction(self,selectedalarms=None) :
-      
+      """  Action performed when triggered
+      """            
       #Has a overridedialog already been created?
-      dialog = getManager().createOverrideDialog(None)
- 
+      dialog = getManager().createOverrideDialog(None) 
       #pop
       raiseAndResetDialog(dialog)   
       
@@ -220,8 +224,9 @@ class OverrideAction(Action) :
 class RemoveFilterAction(Action) :
    """
       For visual hint of filtered data, this toolbar button is checked 
-      automatically if a filter on any column has been applied
-      If the user DESELECTS the button, all column filters will be removed.  
+      automatically if a filter on any column has been applied. Including 
+      searches. 
+      If the user DESELECTS the button, all column and search filters will be removed.  
       The button is disabled if there are no filters applied to the table
    """
    def __init__(self,parent=None,*args,**kwargs) :
@@ -250,7 +255,7 @@ class RemoveFilterAction(Action) :
       
       #Assume that there are no filters on the table
       filtered = self.getFilterState()
-     
+      
       self.setEnabled(filtered)
       self.setChecked(filtered)
       
@@ -264,9 +269,11 @@ class RemoveFilterAction(Action) :
       """
          Are any filters applied?
          :returns boolean
-      """      
+      """     
+     
       filtered = False          
       for filter in self.filters :
+         
          #if one filter is applied, the manager is filtered
          if (filter.isFiltered()) :
             filtered = True
@@ -275,12 +282,14 @@ class RemoveFilterAction(Action) :
    
    def removeAllFilters(self) :
       """ Remove all of the filters """
+      
       for filter in self.filters :
          filter.selectAll(True)
       self.setState()
                
    def performAction(self) :     
       """ Called when the Filter tool bar button is pushed """
+      
       removefilters = not self.isChecked()
       if (removefilters) :
          self.removeAllFilters()

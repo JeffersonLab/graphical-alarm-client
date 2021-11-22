@@ -9,7 +9,6 @@ from DurationWidget import *
 from jlab_jaws_helper.JAWSConnection import *
 
 
-
 class OverrideDialog(QtWidgets.QDialog) :
    """ Access to the various Override Options
    """
@@ -25,7 +24,8 @@ class OverrideDialog(QtWidgets.QDialog) :
             parent : parent of dialog
       """     
       super(OverrideDialog,self).__init__(parent,*args,**kwargs)
-      self.setStyleSheet('QDialog{border: 5px solid black;}')
+      getManager().setDialogStyle(self)
+      
       
       
       #The override types that can be selected
@@ -217,11 +217,11 @@ class SearchWidget(QtWidgets.QGroupBox) :
       """               
       super(SearchWidget,self).__init__("Active Alarms",parent,*args,**kwargs)
       
-      setGroupBoxStyle(self)
+      getManager().setGroupBoxStyle(self)
   
       searchlayout = QtWidgets.QGridLayout()
       
-      self.search = AlarmSearch(alarmlist,parent)
+      self.search = AlarmSearchCombo(alarmlist,parent)
       searchlayout.addWidget(self.search,0,0)          
       
       self.setLayout(searchlayout)
@@ -240,7 +240,7 @@ class ReasonWidget(QtWidgets.QGroupBox) :
             parent : override dialog
       """               
       super(ReasonWidget,self).__init__("Reason for Override",parent,*args,**kwargs)
-      setGroupBoxStyle(self)      
+      getManager().setGroupBoxStyle(self)      
       
       reasonlayout = QtWidgets.QGridLayout()      
       self.reasoncombo = ReasonCombo(parent)

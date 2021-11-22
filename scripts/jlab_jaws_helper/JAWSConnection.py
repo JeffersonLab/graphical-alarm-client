@@ -31,9 +31,6 @@ from jlab_jaws.avro.subject_schemas.entities import RegisteredAlarm, RegisteredC
 from jlab_jaws.avro.referenced_schemas.entities import AlarmClass,\
    AlarmLocation, AlarmCategory, AlarmPriority
 
-
-
-
 # OVERRIDDEN ALARMS
 from jlab_jaws.avro.subject_schemas.entities import OverriddenAlarmValue, \
    LatchedAlarm, FilteredAlarm, MaskedAlarm, DisabledAlarm, OnDelayedAlarm,\
@@ -47,7 +44,6 @@ from confluent_kafka.serialization import StringSerializer, StringDeserializer
 #  CONSUMER
 from confluent_kafka.serialization import StringDeserializer
 from jlab_jaws.eventsource.table import EventSourceTable
-
 
 
 def convert_timestamp(seconds) :
@@ -73,8 +69,10 @@ def get_msg_timestamp(msg) :
        :type msg: 'cimpl.Message'
        :returns timestamp in local time zone
    """        
+   
    #timestamp from Kafka is in UTC
    timestamp = msg.timestamp()
+#   print(msg.topic(),"GETMSGTIMESTAMP",convert_timestamp(timestamp[1]),"\n")
    return(convert_timestamp(timestamp[1]))
 
 def get_headers(msg) :
@@ -86,15 +84,29 @@ def get_headers(msg) :
    """           
    headers = msg.headers()
    return(headers)  
-   
+ 
+def get_alarmname(msg) :
+   name = msg.key()
+   alarmtopic = msg.topic()
+      
+   if (alarmtopic in CONSUMERS) :
+      name = CONSUMERS[alarmtopic].get_alarmname(msg) 
+   return(name)
+
 def get_msg_key(msg) :
    """ Get message key. 
        
        :param msg : topic messge
        :type msg: 'cimpl.Message'
        :returns key       
-   """           
-   return(msg.key())
+   """   
+   key = msg.key()
+#   topic = msg.topic()
+ #  if (topic in CONSUMERS) :
+  #    consumer = CONSUMERS[topic]
+   #   key = consumer.get_msg_key(msg)         
+   
+   return(key)
  
 def get_msg_value(msg) :
    """ Get message key. 
@@ -103,6 +115,8 @@ def get_msg_value(msg) :
        :type msg: 'cimpl.Message'
        :returns value object      
    """           
+  
+ #  print(msg.topic(),"GETMSGVALUE",msg.value(),"\n")
    return(msg.value())
 
 def get_msg_topic(msg) :
@@ -144,6 +158,10 @@ def get_priority_list() :
 
 def get_override_reasons() :
    return(ShelvedAlarmReason._member_names_)
+ 
+def get_override_types() :
+   return(OverriddenAlarmType._member_names_)  
+   
    
 class JAWSConnection(object) :
    """ This class sets up the kafka connection for creating consumers and
@@ -186,8 +204,13 @@ class JAWSConnection(object) :
             'serde' : AlarmStateSerde,
             'deserializer' : None,
             'serializer'   : None
+       #  },
+    #     'overridden-alarms' : {
+     #       'serde' : OverriddenAlarmSerde,
+      #      'deserializer' : None,
+        #    'serializer'   : None
          }
-         #'overridden-alarms' : OverriddenAlarmSerde
+            
       }
 
 
@@ -388,8 +411,7 @@ class JAWSConsumer(JAWSConnection) :
    """ JAWSConnection that subscribes to topics and consumes messages 
    """
    
-   def __init__(self,topic,init_state,update_state,name,
-      monitor=True) :
+   def __init__(self,topic,name,init_state,update_state,monitor=True) :
       
       """ Create a JAWSConsumer instance
           
@@ -406,7 +428,7 @@ class JAWSConsumer(JAWSConnection) :
       """
             
       super(JAWSConsumer,self).__init__(topic)
-      
+  
       self.name = name
       self.topic = topic
       self.monitor = monitor
@@ -415,7 +437,7 @@ class JAWSConsumer(JAWSConnection) :
       
    def _create_event_table(self) :
       ts = time.time()
-      print("***<",self.name,">") # + str(ts))
+
       consumer_config = {
          'topic': self.topic,
          'monitor' : self.monitor,
@@ -439,22 +461,49 @@ class JAWSConsumer(JAWSConnection) :
       """
       self.event_table.stop()
 
+
+class OverriddenAlarmConsumer(JAWSConsumer) :
+   def __init__(self,name,init_state=None,update_state=None,monitor=True) :
+      super(OverriddenAlarmConsumer,self).__init__('overridden-alarms',name,
+         init_state,update_state,monitor)
+      
+      self.key_deserializer = \
+         OverriddenAlarmKeySerde.deserializer(self.schema_registry) 
+      self.value_deserializer = \
+         OverriddenAlarmValueSerde.deserializer(self.schema_registry)
+         
+      self._create_event_table()
+   
+   def get_alarmname(msg) :
+      """ Get message key. 
+       
+         :param msg : topic messge
+         :type msg: 'cimpl.Message'
+         :returns key       
+      """   
+      
+      return(msg.key().name)
+
+
 class AlarmStateConsumer(JAWSConsumer) :
-   def __init__(self,init_state,update_state,name,monitor=True) :
-      super(AlarmStateConsumer,self).__init__('alarm-state',
-         init_state,update_state,name, monitor)
+   def __init__(self,name,init_state=None,update_state=None,monitor=True) :
+      super(AlarmStateConsumer,self).__init__('alarm-state',name,
+         init_state,update_state,monitor)
       
       self.key_deserializer = StringDeserializer()
       self.value_deserializer = \
          AlarmStateSerde.deserializer(self.schema_registry)
          
       self._create_event_table()
-      
+
 class RegisteredAlarmsConsumer(JAWSConsumer) :
-   def __init__(self,init_state,update_state,name,monitor=True) :
-      super(RegisteredAlarmsConsumer,self).__init__('registered-alarms',
-         init_state,update_state,name, monitor)
+   def __init__(self,name,init_state=None,update_state=None,monitor=True) :
+      super(RegisteredAlarmsConsumer,self).__init__('registered-alarms',name,
+         init_state,update_state,monitor)
       
+      if (init_state == None and update_state == None) :
+         monitor = False
+         
       self.key_deserializer = StringDeserializer('utf_8')
       self.value_deserializer = \
           RegisteredAlarmSerde.deserializer(self.schema_registry)
@@ -467,11 +516,12 @@ class RegisteredAlarmsConsumer(JAWSConsumer) :
 
       self._create_event_table()
 
+
 class ActiveAlarmsConsumer(JAWSConsumer) :
-   def __init__(self,init_state,update_state,name,monitor=True) :
+   def __init__(self,name,init_state=None,update_state=None,monitor=True) :
       
-      super(ActiveAlarmsConsumer,self).__init__('active-alarms',
-         init_state,update_state,name, monitor)
+      super(ActiveAlarmsConsumer,self).__init__('active-alarms',name,
+         init_state,update_state,monitor)
       
       self.key_deserializer = StringDeserializer()
       self.value_deserializer = \
@@ -479,3 +529,7 @@ class ActiveAlarmsConsumer(JAWSConsumer) :
 
       self._create_event_table()
       
+
+CONSUMERS = {
+   "overridden-alarms" : OverriddenAlarmConsumer
+}

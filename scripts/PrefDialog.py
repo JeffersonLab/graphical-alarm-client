@@ -1,35 +1,36 @@
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt,QMimeData
-
-
+import datetime
+import time
+import pytz
 from csv import reader,writer,DictReader,DictWriter
 
 from utils import *
 from Actions import *
-from Filters import *
+from FilterMenu import *
+from JAWSDialog import *
 
 #The Preferences Dialog widget.
 #The dialog is made up of individual preference widgets that 
 #manage themselves
-class PrefDialog(QtWidgets.QDialog) :
+class PrefDialog(JAWSDialog) :
    def __init__(self,parent=None,*args,**kwargs) :
-      super().__init__()
-      self.setStyleSheet('QDialog{border: 5px solid black;}')
-      self.setModal(False)
-      self.setSizeGripEnabled(True)
-      self.setSizePolicy(
-         QtWidgets.QSizePolicy.Minimum,QtWidgets.QSizePolicy.Minimum)
-            
-      #List of preferences to apply
-      self.prefwidgets = []
+      super(PrefDialog,self).__init__(parent,*args,**kwargs)
       
-      #prefs in a vlayout    
-      vlayout = QtWidgets.QVBoxLayout()
       
+      vlayout = self.vlayout
       filterprefs = FilterPrefs(self)
       vlayout.addWidget(filterprefs)
       self.filterprefs = filterprefs
       self.prefwidgets.append(filterprefs)
+      
+ #     timefilter = TimeFilterButton(self) 
+  #    vlayout.addWidget(timefilter) 
+      
+   #   defaultrows = DefaultRowPrefs(self)
+    #  vlayout.addWidget(defaultrows)
+     # self.defaultrows = defaultrows
+      #self.prefwidgets.append(defaultrows)
       
       #Allow the user to select the default sort column
       sortprefs = SortPrefs(self)
@@ -58,6 +59,7 @@ class PrefDialog(QtWidgets.QDialog) :
       
    #Called to reset preferences
    def reset(self) :
+      
       for pref in self.prefwidgets :
          pref.reset()      
    
@@ -68,15 +70,17 @@ class PrefDialog(QtWidgets.QDialog) :
       widget = QtWidgets.QWidget()
       widget.setLayout(layout)
       
-      acceptbutton = QtWidgets.QPushButton("Accept Changes")
+      acceptbutton = QtWidgets.QPushButton("Apply Changes")
       acceptbutton.clicked.connect(self.applyChanges)
       layout.addWidget(acceptbutton) 
-      acceptbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
+      getManager().setButtonStyle(acceptbutton)
+      #acceptbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
       
       cancelbutton = QtWidgets.QPushButton("Close")
       cancelbutton.clicked.connect(self.Close)
       layout.addWidget(cancelbutton)
-      cancelbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
+     # cancelbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
+      getManager().setButtonStyle(cancelbutton)
       return(widget)
    
    #Apply changes for each applicable section
@@ -112,47 +116,89 @@ class PrefDialog(QtWidgets.QDialog) :
    def Close(self) :
       self.close()  
 
-#A button that displays the filter menu.
-class FilterButton(QtWidgets.QPushButton) :
-   def __init__(self,filter,parent,*args,**kwargs) :
-      super(FilterButton,self).__init__(filter.getName(),parent) 
+
+
+class TimeFilterButton(QtWidgets.QPushButton) :
+   def __init__(self,parent=None,*args,**kwargs) :
+      super(TimeFilterButton,self).__init__("Timestamp",parent)
       
-      self.filter = filter
-      self.parent = parent
+      self.clicked.connect(self.timeButtonPushed)
+
+   def timeButtonPushed(self) :
+      self.timewidget = TimeWidget()
+      self.timewidget.show()
       
-      layout = QtWidgets.QVBoxLayout()          
-      self.setLayout(layout)
-      self.clicked.connect(
-         lambda checked : self.ShowFilterMenu(checked,filter))
+class TimeWidget(QtWidgets.QWidget) :
+   def __init__(self) :
+      super(TimeWidget,self).__init__()
       
-      self.icon = QtGui.QIcon("funnel--plus.png")
-      self.configureDialog()
+      widgetlayout = QtWidgets.QVBoxLayout()
+      self.setLayout(widgetlayout)
       
-   #Create a filternmenu and display it.
-   def ShowFilterMenu(self,checked,filter) :
+      fromlayout = QtWidgets.QHBoxLayout()
+      fromwidget = QtWidgets.QWidget()
+      fromwidget.setLayout(fromlayout)
+      
+      fromlabel = QtWidgets.QLabel("To")
+      fromlayout.addWidget(fromlabel)
+      
+      
+      datetime = QtCore.QDateTime.currentDateTime()
+      timezone = QtCore.QTimeZone(b'America/New_York')
+    
+      newdatetime = datetime.toTimeZone(timezone)
+
+
+
+
+ 
+      
+      fromchooser = QtWidgets.QDateTimeEdit(newdatetime)
+  
+      
+      
+ #     print("TIMESPEC",fromchooser.timeSpec())
+      fromlayout.addWidget(fromchooser)
+  #    fromchooser.setDisplayFormat("HH:MM")
+      
+      widgetlayout.addWidget(fromwidget)
+      now = QtCore.QDateTime.currentDateTime()
      
-      menu = FilterMenu(filter)
-      menu.exec_(self.mapToGlobal(self.parent.pos()))
+      #print(now.toString(Qt.DefaultLocaleLongDate))
+      zonelist = QtCore.QTimeZone.availableTimeZoneIds(QtCore.QLocale.UnitedStates)
+    #  for zone in zonelist :
+         
+class PrefGroupBox(QtWidgets.QGroupBox) :
+   def __init__(self,text,parent,*args,**kwargs) :
+      super(PrefGroupBox,self).__init__(text)      
+      
+      getManager().setGroupBoxStyle(self) 
+      self.parent = parent
+  
+   def reset(self) :
+      pass
    
-   #If filter is applied, the filter button will have the filter icon
    def configureDialog(self) :
-      filter = self.filter      
-      filtered = filter.isFiltered()
+      pass
+   
+   def SaveChanges(self) :
+      pass
+       
+
       
-      if (filtered) :
-         self.setIcon(self.icon)
-      else :
-         self.setIcon(QtGui.QIcon());
       
+
+
 #Display the filter preferences.
 class FilterPrefs(QtWidgets.QGroupBox) :
-   def __init__(self,parent,*args,**kwargs) :
-      super(FilterPrefs,self).__init__("Filters",parent)
+   def __init__(self,parent=None,name="Default Filters",*args,**kwargs) :
+      super(FilterPrefs,self).__init__(name,parent)
       
-      setGroupBoxStyle(self)
-      
+      getManager().setGroupBoxStyle(self)
+      self.parent = parent
       #Each filter will have a button that will need to be configured
       self.filterbuttons = []
+     
       
       vlayout = QtWidgets.QVBoxLayout()
       vlayout.setSpacing(1)
@@ -185,31 +231,15 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       
       self.removebutton.setEnabled(filtered)
       for button in self.filterbuttons :
+         
          button.configureDialog()
       
    #Called by the Remove Filters button  
    def RemoveFilters(self) :
       filteraction = self.filteraction   
       filteraction.removeAllFilters()
-   
-   #Add a button for each available filter
-   def AddFilterWidgets(self) :
-      #Empty out the filter button list, since we keep creating
-      #new ones.
-      self.filterbuttons = []
+  
       
-      #The filterbuttons are associated with another widget
-      widget = QtWidgets.QWidget()
-      filterlayout = QtWidgets.QHBoxLayout()
-      widget.setLayout(filterlayout)
-            
-      for filter in self.SortFilters() :
-         button = FilterButton(filter,widget)
-         self.filterbuttons.append(button)
-         filterlayout.addWidget(button)
-      
-      return(widget) 
-
    #We want to add the filter buttons in the order that
    #they appear on the table. Each time the pref dialog is 
    #opened, remove the previous set, and then add them back in
@@ -222,11 +252,13 @@ class FilterPrefs(QtWidgets.QGroupBox) :
    def SortFilters(self) :
       sorted = []
       #Get the header text in visible order
-      visualorder = getModel().VisibleColumnOrder() 
+      visualorder = getModel().visibleColumnOrder() 
       
       #Add the filter for each header to the sorted list
       for header in visualorder :
-         filter = GetFilterByName(header)
+         
+         filter = getFilterByHeader(header)
+         
          if (filter != None) :
             sorted.append(filter)
       return(sorted) 
@@ -236,10 +268,13 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       prefs = getManager().getPrefs()
       if (not 'filters' in prefs) :
          prefs['filters'] = {}
-         
+      
+    
+      
       for filter in getManager().getFilters() :
+         
          filtername = filter.getName()
-         prefs['filters'][filtername] = filter.SaveFilter()
+         prefs['filters'][filtername] = filter.saveFilter()
     
    #Don't need this method since changes are applied immediately.
    def applyChanges(self) :
@@ -247,6 +282,7 @@ class FilterPrefs(QtWidgets.QGroupBox) :
    
    #Called when the dialog has been RE-opened.
    def reset(self) :
+     
       #Remove the filter buttons
       self.RemoveFilterWidgets()
       #Add them back in visible column order
@@ -258,12 +294,202 @@ class FilterPrefs(QtWidgets.QGroupBox) :
       #Configure all of the buttons
       self.configureDialog()
 
+   #Add a button for each available filter
+   def AddFilterWidgets(self) :
+      #Empty out the filter button list, since we keep creating
+      #new ones.
+      self.filterbuttons = []
+      
+      
+      #The filterbuttons are associated with another widget
+      widget = QtWidgets.QWidget()
+      filterlayout = QtWidgets.QHBoxLayout()
+      filterlayout.setSpacing(1)
+      widget.setLayout(filterlayout)
+      filterlayout.setAlignment(Qt.AlignCenter)
+      for filter in self.SortFilters() :
+         headeronly = filter.getProperty('headeronly')
+         if (headeronly == None or not headeronly) :
+            filterwidget = FilterButton(filter,widget)
+            filterlayout.addWidget(filterwidget,Qt.AlignCenter)      
+            self.filterbuttons.append(filterwidget)
+      return(widget) 
+   
+#A button that displays the filter menu.
+class FilterButton(QtWidgets.QPushButton) :
+   def __init__(self,filter,parent,*args,**kwargs) :
+      filtername = filter.getName() 
+      if (filtername == "timestamp") :
+         filtername = "timespan"
+      super(FilterButton,self).__init__(filtername,parent) 
+      
+     # self.setFixedWidth(15)
+      #return
+      
+      self.filter = filter
+      self.parent = parent
+      
+      layout = QtWidgets.QVBoxLayout()          
+      self.setLayout(layout)
+      self.clicked.connect(
+         lambda checked : self.ShowFilterMenu(checked,filter))
+      
+      self.icon = QtGui.QIcon("funnel--plus.png")
+      self.configureDialog()
+      
+   #Create a filternmenu and display it.
+   def ShowFilterMenu(self,checked,filter) :
+      if (isinstance(filter,ExclusiveFilter)) :
+         menu = ExclusiveFilterMenu(filter)
+      else :
+         menu = FilterMenu(filter)
+      menu.exec_(self.mapToGlobal(self.parent.pos()))
+     # return(menu)
+   
+   #If filter is applied, the filter button will have the filter icon
+   def configureDialog(self) :
+      filter = self.filter      
+      filtered = filter.isFiltered()
+      
+      if (filtered) :
+         self.setIcon(self.icon)
+      else :
+         self.setIcon(QtGui.QIcon());
+
+class DefaultRowPrefs(PrefGroupBox) :
+   """ Allows user to limit then number of rows """
+   def __init__(self,parent,*args,**kwargs) :
+      super(DefaultRowPrefs,self).__init__("Display Rows",parent)
+           
+      self.parent = parent
+     
+      #Each filter will have a button that will need to be configured
+      self.filterbuttons = []
+      
+      #Create an exclusive button group.
+      #...more than one of the radiobuttons cannot be selected at once
+      #Have to have buttongroup as a member of the group box (self),
+      #or method will not recognize it.
+      self.buttongroup = QtWidgets.QButtonGroup()
+
+      
+      #This set of prefs has two associated filters. 
+      layout = QtWidgets.QHBoxLayout()
+      self.setLayout(layout) 
+      self.layout = layout
+      layout.setSpacing(50)
+      self.setSizePolicy(QtWidgets.QSizePolicy.Maximum,QtWidgets.QSizePolicy.Maximum)
+       
+      #Widget that contains a button for each filter
+      filterwidget = self.AddFilterWidgets()
+      layout.addWidget(filterwidget)
+      self.filterwidget = filterwidget
+      
+   def AddFilterWidgets(self) :
+      
+      #Empty out the filter button list, since we keep creating
+      #new ones.
+      self.filterbuttons = []
+      
+      
+      #The filterbuttons are associated with another widget
+      widget = QtWidgets.QWidget()
+      filterlayout = QtWidgets.QHBoxLayout()
+      filterlayout.setSpacing(1)
+      widget.setLayout(filterlayout)
+      filterlayout.setAlignment(Qt.AlignCenter)
+      
+      nolimits = QtWidgets.QRadioButton('All')  
+      filterlayout.addWidget(nolimits) 
+      self.buttongroup.addButton(nolimits)
+
+      countfilter = getFilterByHeader('name')
+      filterwidget = CountLimit(countfilter,widget)
+      filterlayout.addWidget(filterwidget)
+      self.buttongroup.addButton(filterwidget.countlimit)
+      self.filterbuttons.append(filterwidget)
+      
+      return(widget)
+      
+      
+      """
+   
+      for filter in self.SortFilters() :
+         print(filter)
+         break
+         headeronly = filter.getProperty('headeronly')
+         if (headeronly == None or not headeronly) :
+            filterwidget = FilterButton(filter,widget)
+            filterlayout.addWidget(filterwidget,Qt.AlignCenter)      
+            self.filterbuttons.append(filterwidget)
+      return(widget) 
+      
+      
+      """
+class CountLimit(QtWidgets.QWidget) :
+   def __init__(self,filter,parent,*args,**kwargs) :
+      super(CountLimit,self).__init__(parent)
+      
+      self.filter = filter
+     
+      layout = QtWidgets.QHBoxLayout()
+      layout.setSpacing(4)
+      self.setSizePolicy(QtWidgets.QSizePolicy.Maximum,QtWidgets.QSizePolicy.Preferred)
+      
+      self.setLayout(layout)
+      #Limit to X alarms
+      countlimit = QtWidgets.QRadioButton("Limit to")
+      layout.addWidget(countlimit)
+      self.countlimit = countlimit
+
+       
+      countval = QtWidgets.QLineEdit()
+      countval.setAlignment(Qt.AlignRight)
+      countval.returnPressed.connect(self.trigger)
+      countval.setFixedWidth(45)
+      countvalidator = QtGui.QIntValidator()
+      countvalidator.setBottom(0)
+      countval.setValidator(countvalidator)
+      layout.addWidget(countval)
+      self.countval = countval
+      
+      alarmlabel = QtWidgets.QLabel("Alarms")
+      alarmlabel.setSizePolicy(QtWidgets.QSizePolicy.Maximum,QtWidgets.QSizePolicy.Preferred)
+      layout.addWidget(alarmlabel)
+  
+   
+   def getRadioButton(self) :
+      return(self.countlimit)
+   
+   def getMaxTextEdit(self) :
+      return(self.countval)
+      
+   def configAllOption(self) :
+      return
+   
+   def trigger(self,checked=None) :
+      
+      #The sender will be the checkbox from which the signal came
+      sender = self.sender()  
+      value = sender.text()    
+      #Actually set the filter 
+      self.filter.setFilter('max',value)
+ 
+      #Redetermine the value of the "all" option
+      self.configAllOption()
+      
+      #Set the column header based on the new state
+      self.filter.setHeader()
+   
+
+
+
 #Section of prefdialog dealing with sorting preferences.      
 class SortPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent,*args,**kwargs) :
       super(SortPrefs,self).__init__("Default Sort",parent)
       
-      setGroupBoxStyle(self)
+      getManager().setGroupBoxStyle(self)
       self.prefs = getManager().getPrefs()
       layout = QtWidgets.QHBoxLayout()
       self.setLayout(layout)
@@ -319,7 +545,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
       combo.clear()
       
       #Get the headers (in visible order)
-      options = getModel().VisibleColumnOrder()
+      options = getModel().visibleColumnOrder()
      
       #Add the current sort column as the combo box value    
       header = self.CurrentSortOption()
@@ -354,7 +580,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
    #Get the column number that is being used to sort.
    def GetSortColumn(self) :
       sortby = self.combo.currentText().lower()    
-      sortcolumn = getModel().GetColumnIndex(sortby)    
+      sortcolumn = getModel().getColumnIndex(sortby)    
       return(sortcolumn)  
 
    #Add this preference widget's properties to the 
@@ -392,6 +618,7 @@ class SortPrefs(QtWidgets.QGroupBox) :
    #For the "Sort Preferencses" section, we want to fill up the 
    #combo list in the same order as the columns
    def reset(self) :      
+     
       self.FillCombo()
       self.configureDialog()
       
@@ -402,7 +629,7 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
    def __init__(self,parent, *args,**kwargs) :
       super(DisplayPrefs,self).__init__("Display Columns",parent)      
       
-      setGroupBoxStyle(self)
+      getManager().setGroupBoxStyle(self)
       #Using a gridlayout, so will keep track of the rows.
       self.row = None
       self.showlist = []
@@ -528,7 +755,7 @@ class DisplayPrefs(QtWidgets.QGroupBox) :
       #Which properties to show, and which to hide.
       hidelist = self.GetDisplayList("hide")
       showlist = self.GetDisplayList("show")
-      getModel().applyChanges(showlist)
+      getModel().applyDisplayPrefs(showlist)
  
    def configureDialog(self) :
       pass

@@ -50,6 +50,7 @@ class JAWSProcessor(object) :
          :returns: JAWSAlarm | None
       """
       found = None
+      
       if (alarmname in self.alarm_list) :
          found = self.alarm_list[alarmname] 
       return(found)
@@ -60,36 +61,38 @@ class JAWSProcessor(object) :
          :type msg: 'cimpl.Message'
          :returns: JAWSAlarm
       """
-      
+     
       #The topic will indicate how to proceed
       topic = get_msg_topic(msg)
-      
       #The msg key is the name of the alarm
-      name = get_msg_key(msg) 
+      name = get_alarmname(msg) 
       
       #Does the alarm already exist?
       alarm = self.find_alarm(name) 
-      
+     
       #The registered-alarms topic contains the alarm definition 
       if (topic == "registered-alarms") :
          if (alarm == None) :
             alarm = JAWSAlarm(name,msg)          
          else :
+            
             #Redefine the alarm if it already exists
             alarm.update_alarm(msg)  
       
       #Alarm has come in on a topic prior to the registered-alarms
       #topic. Create the alarm to be defined later.              
       if (alarm == None) :         
+         
          alarm = JAWSAlarm(name,None)
-           
+        
       self._add_alarm(alarm)
       
       #Dispense with the alarm as appropriate
       if (topic == "alarm-state") :
+         
          alarm.update_state(msg)
       if (topic == "active-alarms") :
-         
          alarm.update_active(msg)
-         
+      if (topic == "overridden-alarms") :
+         alarm.update_override(msg)
       return(alarm)

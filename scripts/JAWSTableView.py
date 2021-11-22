@@ -5,16 +5,19 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette
 
-from Filters import *
+from FilterMenu import *
 from Actions import *
 from PropertyDialog import *
 from utils import *
 
 #Parent tableview 
-#AlarmTable and ShelfTable inherit
-class TableView(QtWidgets.QTableView) :
+class JAWSTableView(QtWidgets.QTableView) :
+   """ 
+      JAWSTableView - parent for AlarmTable and OverrideTable
+   """
+
    def __init__(self,*args,**kwargs) :
-      super(TableView,self).__init__(*args,**kwargs)
+      super(JAWSTableView,self).__init__(*args,**kwargs)
       
       #Adjusts columns to contents
       self.setSizeAdjustPolicy(
@@ -30,8 +33,9 @@ class TableView(QtWidgets.QTableView) :
       
       #Add a context menu (3rd mouse) to the header
       header.setContextMenuPolicy(Qt.CustomContextMenu)
-      header.customContextMenuRequested.connect(self.SelectHeader)
-   
+      header.customContextMenuRequested.connect(self.selectHeader)
+      
+ 
    #Get the single alarm that is selected.
    def getSelectedAlarm(self) :
       """ 
@@ -76,56 +80,66 @@ class TableView(QtWidgets.QTableView) :
       """ #If a row is selected, configure tool bar as appropriate. """
       getManager().getToolBar().configureToolBar()
 
-   #User has requested the contextmenu
-   #signal passes in the header position (visible column index)  
-   def SelectHeader(self,vis) :
-   
-      #If the columns have been rearranged, 
-      #they will have a "visualIndex" and a "logicalIndex" 
-      #Need to know what the logicalIndex is of the passed in vis 
+  
+   def selectHeader(self,vis) :
+      """ 
+         User has requested the contextmenu
+         signal passes in the header position (visible column index)  
+         If the columns have been rearranged, 
+         they will have a "visualIndex" and a "logicalIndex" 
+         Need to know what the logicalIndex is of the passed in vis 
+     
+     """
       col = self.horizontalHeader().logicalIndexAt(vis)
       
       #Most columns have a filter associated with it 
-      name = getModel().GetColumnName(col)
-      filter = GetFilterByName(name)      
+      name = getModel().getColumnName(col)
+      jawsfilter = getFilterByHeader(name)      
       
       #If there is a filter, show the filter menu
-      if (filter != None) :
-         menu = FilterMenu(filter) 
+      if (jawsfilter != None) :
+         if (jawsfilter.getName() == 'timestamp') :
+            menu = ExclusiveFilterMenu(jawsfilter)
+         else :
+            menu = FilterMenu(jawsfilter) 
          action = menu.exec_(self.mapToGlobal(vis))
    
    
-   ## The following common actions, are associated with a row's contextmenu 
-   
-   #User can acknowledge the selected alarms
-   def AddPropertyAction(self,menu) :
-      alarm = self.getSelectedAlarms()[0]
-      
+   #Action common to JAWSTables
+   def addPropertyAction(self,menu) :
+      """ Display the properties of the select alarm
+      """
+      alarm = self.getSelectedAlarm()    
       PropertyAction(menu,alarm).addAction()
-  
-   #User can also shelve selected alarms
-   def AddShelfAction(self,menu) :
-      ShelfAction(menu).addAction()
-  
+   
+   def getDefaultSort(self) :
+      """ Determine the default sort if not in user prefs
+      """
+      sortcolumn = getModel().getColumnIndex(self.defaultsort)
+      return(sortcolumn,self.defaultorder)
+
+ 
 #Extend the table view for our own AlarmTable
-class AlarmTable(TableView) :
+class AlarmTable(JAWSTableView) :
+   """ Extend JAWSTableView for viewing the ActiveAlarms
+   """
    def __init__(self,*args,**kwargs) :
       super(AlarmTable,self).__init__(*args,**kwargs)
+      
       self.defaultsort = "timestamp"
       self.defaultorder = 1
    
-   def GetDefaultSort(self) :
-      sortcolumn = getModel().GetColumnIndex(self.defaultsort)
-      return(sortcolumn,self.defaultorder)
-  
-   #Context menu when user right-mouse clicks in a cell. 
-   #Multiple rows/columns/cells can be selected   
+
+
    def contextMenuEvent(self,event) :
-      
+      """  
+         Context menu when user right-mouse clicks in a cell. 
+         Multiple rows/columns/cells can be selected   
+      """
       menu = QtWidgets.QMenu(self)  
       
       #TitleAction is a placeholder for the title of the context menu
-      self.AddTitleAction(menu)
+      self.addTitleAction(menu)
       
       #separator between the title and actions.
       separatorbg = "background: red"   
@@ -135,12 +149,11 @@ class AlarmTable(TableView) :
       
       self.mainmenu = menu
       
-      self.AddAckAction(menu)
-      self.AddPropertyAction(menu)
-      self.AddOverrideAction(menu)
+      self.addAckAction(menu)
+      self.addPropertyAction(menu)
+      self.addOverrideAction(menu)
       
       action = self.performAction(event)
-      
       if (action != None) :        
          action.performAction(self.getSelectedAlarms())
    
@@ -151,21 +164,26 @@ class AlarmTable(TableView) :
       action = self.mainmenu.exec_(self.mapToGlobal(event.pos()))
       return(action)
       
-   def AddTitleAction(self,menu) :
+   def addTitleAction(self,menu) :
       TitleAction(menu).addAction()
    
-   def AddOverrideAction(self,menu) :
+   def addOverrideAction(self,menu) :
       OverrideAction(menu).addAction()
 
    #User can acknowledge the selected alarms
-   def AddAckAction(self,menu) :
+   def addAckAction(self,menu) :
       AckAction(menu).addAction()
 
 #The latched and status column (col=0, col=1) 
 #Displays the status indicators.
 #Must create our own delegate.     
 class StatusDelegate(QtWidgets.QStyledItemDelegate) :
-   
+   def __init__(self,statusindex) :
+      super(StatusDelegate,self).__init__()
+      
+      self.statusindex = statusindex 
+      
+      
    #Size of the column
    def sizeHint(self,option,index) :
       return(QtCore.QSize(50,50))
@@ -176,59 +194,46 @@ class StatusDelegate(QtWidgets.QStyledItemDelegate) :
       row = index.row()
       col = index.column()
       alarm = getModel().data[row]
-      (sevr,latch) = get_sevrDisplay(alarm)
+      
       
       #The data is the value from the "data" subroutine.
       #In this case the "latched" and "sevr" status'
       data = index.data()
       
       #The alarm associated with this col=0 or col=1
-      if (col == 0 or col == 1) :
+      if (col == self.statusindex) :
          if (data != None) :                                
             image = GetStatusImage(data)
             if (image == None) :
                return
-            x = option.rect.center().x() - image.rect().width() / 2
-            y = option.rect.center().y() - image.rect().height() / 2
-            painter.drawPixmap(x, y, image)
-           
-
-
-
-
+            small = image.scaled(
+               option.rect.size(),Qt.KeepAspectRatio);   
+            x = option.rect.center().x() - small.rect().width() / 2 + 5
+            y = option.rect.center().y() - small.rect().height() / 2 + 2
+            painter.drawPixmap(x, y, small)
 
       
 #Create the ShelfTable
-class ShelfTable(TableView) :
+class OverrideTable(JAWSTableView) :
    def __init__(self,*args,**kwargs) :
-      super(ShelfTable,self).__init__(*args,**kwargs)
-   
+      super(OverrideTable,self).__init__(*args,**kwargs)
+      
+      self.defaultsort = "timeleft"
+      self.defaultorder = 1
+      self.columnlist = list(getManager().columns)
+      statusindex = self.columnlist.index("status")
+      
+      self.setItemDelegateForColumn(statusindex, StatusDelegate(statusindex))
+ 
    #Context menu when user right-mouse clicks in a cell. 
    #Multiple rows/columns/cells can be selected   
    def contextMenuEvent(self,event) :      
-      
+      return
       menu = QtWidgets.QMenu(self)
       self.AddUnShelveAction(menu) 
       self.AddShelfAction(menu)
-      self.AddPropertyAction(menu) 
+      self.addPropertyAction(menu) 
           
       action = menu.exec_(self.mapToGlobal(event.pos()))
-      
-   
-   #User can unshelve selected alarms
-   def AddUnShelveAction(self,menu) :
-      UnShelveAction(menu).addAction()
-      return
-      action = UnShelveAction(menu)
-      
-      alarmlist = self.getSelectedAlarms()
-      text = "Unshelve Selected"
-      if (len(alarmlist) == 1) :
-         text = "Unshelve: " + alarmlist[0].get_name()
-     
-      if (len(alarmlist) > 0) :
-         menu.addAction(action)
-         action.setText(text)
-      return(action)
  
    

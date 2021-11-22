@@ -15,12 +15,11 @@ class WorkerSignals(QObject) :
    error = pyqtSignal(tuple)
    result = pyqtSignal(object)
    progress = pyqtSignal(object)
-
+   output = pyqtSignal(object)
          
 class JAWSWorker(QRunnable) :
    def __init__(self,fn,topic,*args,**kwargs) :
       super(JAWSWorker,self).__init__()
-      
       
       #fn is the function in the GUI to call from the thread
       #In this case it is AlarmProcessor.GetAlarms()
@@ -65,7 +64,7 @@ class JAWSWorker(QRunnable) :
       
 
 
-#worker thread (generic)    
+#Thread for alarm expiration countdown    
 class Worker(QRunnable) :
    def __init__(self,fn,delay = 0.5,*args,**kwargs) :
       super(Worker,self).__init__()
@@ -79,27 +78,34 @@ class Worker(QRunnable) :
       self.args = args
       self.kwargs = kwargs
       self.running = True
+      self.alarm = args
       
+     
       #Worker will emit a signal upon return from GUI call
       self.signals = WorkerSignals()
    
    def SetDelay(self,delay) :
       self.delay = delay   
-   
+  
    #The thread continues to run as long as the application is 
    #up. When user wants to quit, self.running is set to False 
    def run(self) :      
+      
       while (self.running) :
          try :
+            
+            
             #Call the proscribed function
             result = self.fn(*self.args,**self.kwargs)
             
+            #print("RESULT:",result)
          except :
             traceback.print_exc()
          else :
             #emit the result. The GUI will pick up the result to process
             self.signals.output.emit(result)
          
+         #self.running = False
          self.delay = 0.5
          delay = self.delay  
          #Wait, and do it again

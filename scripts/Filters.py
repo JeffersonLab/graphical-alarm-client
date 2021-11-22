@@ -1,176 +1,251 @@
-
-
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QAction, QToolBar, QSpacerItem, QDialog
-from jlab_jaws_helper.JAWSConnection import *
-from ModelView import *
 
-def GetFilterByName(name) :
+from jlab_jaws_helper.JAWSConnection import *
+
+from utils import *
+
+#Filter Objects used to sort and filter the model view
+def getFilterByHeader(header) :
+   """ Get the filter object by the column header
+       Args:
+         header : the column header text
+   """
+   #turn the header title into the same format as filter names.
+   header = header.replace(" ","_")
+      
    result = None
    filters = getManager().getFilters()
-   for filter in filters :
-      if (filter.getName() == name) :
+  
+   #Iterate the the list.
+   for filter in filters :     
+      
+      if (filter.getName() == header) :
          return(filter)
    return(result)
-   
-   
-#All filters inherit from this one.
-#example: Category
+
+
+      
 class Filter(object) :
-   def __init__(self,name) : 
-   
-      #All filters get an "Empty". In case the alarm 
-      #has not been defined with the filtered property
-      options = ["Empty"]
+   """ Abstract Filter Class 
+   """
+   def __init__(self,name=None,config=None,**kwargs) : 
+      """ Create an instance
+          Args:
+            name : name of the filter (example "category")
+            
+      """
+      #Filter's state
+      self.filtered = False  #Has the filter been limited by ANY selections.
       
-      #The specific filter options ['RF','Misc','BPM']
-      filteroptions = self.GetOptions()
-      
-      #Add this to "Empty"
-      options.extend(filteroptions)      
-      self.options = options
-      
-      #The name of the filter ("Category"      
+      #The name of the filter ("category")  
+      self.options = None          #example: ['RF','BCM']
+      self.optionstate = None      #example {'RF' : True, 'BCM' : False} True = show 
       self.filtername = name
       
-      #Whether or not the option is filtered out or not
-      self.settings  = {}
+      self.config = config #Filters can be made passing in a config dictionary
+      self.debug = False
       
-      #Filter's state
-      self.filtered = False
-      
-      self.InitSettings()
-
+      #Initialize the set of options available
+      self.updateOptions()
    
-   def SaveFilter(self) :
+   def updateOptions(self) :
+      """ Create the list of options for the filter
+      """
+      options = ['All']
+      if ('empty' in self.config) :
+         options.append('Empty')
       
-      settings = {}
-      for option in self.options :
-         val = self.GetOptionSetting(option)
-         settings[option] = val
+
+      filteroptions = self.getOptions()
+      
+      options.extend(filteroptions)
+
+      self.setFilterOptions(options)
+      
+      #Stores whether or not the option has been filtered
+      self.optionstate  = self.initState()
  
-      return(settings)
+   def initState(self) :
+      """ Initialize each option as "True" 
+      """     
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :
+         optionstate = {}
+         for option in self.options :
+            optionstate[option] = True    #optionstate['RF'] = True (check box is checked)
+      return(optionstate)
    
-   #Access to the filter name
-   def getName(self) :
-      return(self.filtername)
+   def getFilterOptions(self) :
+     self.updateOptions()
+     return(self.options)   
    
-   #Access the filter state
-   def isFiltered(self) :
-      return(self.filtered)
+   
+   def setFilterOptions(self,options) :
+      self.options = options
+   
+   def getProperty(self,prop) :
+      
+      propval = None
+      if (self.config != None and prop in self.config) :
+         propval = self.config[prop]
+      return(propval)  
 
-   #Set the filter state  
-   def setFiltered(self) :
-      #If one option is filtered out, the filter is "filtered"
+   
+   #Get the setting of a specific option in the filter
+   def getOptionState(self,option) :
+      """ Get the current state of the option" 
+      """  
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :
+         
+         return(True)
+      checked = False
+      if (option in optionstate) :
+         val = optionstate[option]
+         checked = val      
+      return(checked)
+  
+   def setFilterState(self) :
+      """If one option is filtered out, the filter is "filtered"
+      """
+      
+      
       filtered = False
-      if (not self.settings == None and len(self.settings) > 0) :
-         for option in self.settings :
-            val = self.GetOptionSetting(option)
+      if (not self.optionstate == None and len(self.optionstate) > 0) :
+         for option in self.optionstate :
+            val = self.getOptionState(option)
             if (val == 0) :
                filtered = True
                break
+   
       self.filtered = filtered
-      
-   #Get the filter's current settings
-   def getCurrentSettings(self) :     
-      return(self.settings)
    
-   def InitSettings(self) :
-      settings = {}
-      
-      name = self.getName()
-      settings = {}
-      for option in self.options :
-         settings[option] = True
-      self.settings = settings
-      
-   
-   #Set the setting configuration   
-   def setSettings(self,settings) :
-      
-      self.settings = settings
-      
-      #Whenever the settings are set, determine the new
-      #filter state
-      self.setFiltered()
-      
-   #Get the setting of a specific option in the filter
-   def GetOptionSetting(self,option) :
-      settings = self.getCurrentSettings()
-      
-      checked = False
-      if (option in settings) :
-         val = settings[option]
-         checked = val
-      
-      return(checked)
-   
-   #Determine whether or not we add the filter icon to
-   #the column header.
-   def setHeader(self) :
-      #Iterate through each setting.
-      #If at least one setting's value is 0,
-      #display the filter icon on the header      
-      settings = self.getCurrentSettings()      
-      headerfilter = False
-      if (not settings == None) :
-         for prop in settings :
-            if (settings[prop] == 0) :
-               headerfilter = True
-               break   
-                       
-      #Call the model with the results
-      getModel().setHeader(self.getName(),headerfilter)
-      getManager().getRemoveFilterAction().setState()
- 
    def setFilter(self,option,value) :      
+      """ Applies the filter to the model
+          Args:
+            option : A filter choice (examples: [RF] [Injector])
+            value  : Qt.checked or Qt.Unchecked
+      """
       #Get the current setting configuration and set the option's
       #value as appropriate
-      settings = self.getCurrentSettings()
-      settings[option] = value
+      optionstate = self.getCurrentState()
+      optionstate[option] = value
       
       #Warn the the proxymodel that something is going to change
       #and the table needs to redraw...and thus refilter
       getModel().layoutAboutToBeChanged.emit() 
-      
       #Assign the new setting configuration
-      self.setSettings(settings) 
+      self.setState(optionstate) 
       
       #Let the proxy model know we're done.
       getModel().layoutChanged.emit()  
+
+
+   def getName(self) :
+      """ Access the filter name (same as header column)
+      """
+      return(self.filtername)
    
-   #Select all options...basically unfilter the column
-   def selectAll(self,selected) :
+   #Access the filter state
+   def isFiltered(self) :
+      """ Has this filter been applied? 
+      """
+      optionstate = self.getCurrentState()
+      filtered = False
+      if (optionstate != None) :
+         for option in optionstate :
+            if (optionstate[option] == False) :
+               filtered = True
+               break
+      
+      self.filtered = filtered
+      
+      return(self.filtered)
+   
+   #Get the filter's current optionstate
+   def getCurrentState(self) :     
+      """ The most recent state of the filter options
+      """
+      return(self.optionstate)
+    
+     
+   def setState(self,optionstate) :
+      """ Assign the optionstate (state of each option in filter)
+      """ 
+      self.optionstate = optionstate
+      #Whenever the optionstate are set, determine the new
+      #filter state
+      self.setFilterState()
+   
+   
+   def setHeader(self) :
+      """ Determine whether or not we add the filter icon to
+          the column header.
+      """
+      #Iterate through each option
+      #If at least one options value is 0, filter is applied.
+      #Display the filter icon on the header      
+      optionstate = self.getCurrentState()     
+      headerfilter = False
+      if (not optionstate == None) :
+         for prop in optionstate :
+            if (optionstate[prop] == 0) :
+               headerfilter = True
+               break   
+      
+      #Call the model with the results
+      getModel().configureHeader(self.getName(),headerfilter)   
+     
+      #Update the Manager's filter action on ToolBar      
+      getManager().getRemoveFilterAction().setState()
+ 
+   
+   
+   def selectAll(self,check) :
+      """ Apply "check" to all filter options
+          Args:
+            check: option is checked (True/False)
+      """
       for option in self.options :        
-         self.setFilter(option,selected)
+         self.setFilter(option,check)
       self.setHeader()      
       
+     
+   def getFilterVal(self,alarm) :
+      """ Get the value of the alarm property associated
+          with this filter
+      """
+      prop = self.getName()
+      return(alarm.get_property(prop,name=True))
       
-   
-   #Apply the filter to the set of alarm data.
-   #This is called by the model's "filterAcceptRow" method.
-   #Compare the filter configuration to the alarm's value.
-   def ApplyFilter(self,alarm) :
+
+   def applyFilter(self,alarm) :
+      """ Apply the filter to this alarm
+          This is called by the model's "filterAcceptRow" method.
+          Which compare the filter configuration to the alarm's value.
+            Args:
+               alarm : JAWSAlarm 
+      """     
       #Assume we'll keep the alarm.
       keepalarm = True
-      
       #Access the current configuration.
-      settings = self.getCurrentSettings()
-      
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :
+         return(True)
       #Go through each filter option
       for option in self.options :
          #Just in case, check that the option is in the 
-         #settings configuration.
-         if (option in settings) :
+         #optionstate configuration.
+         if (option in optionstate) :
             #The desired state of the user. 
-            state = settings[option]
-          
+            state = optionstate[option]
+ 
             #If the state of the setting is 0 or False,
             #Need to check the alarm value.
             if (state == 0 or not state) :
                #access the value of the alarm
-               alarmval = self.GetFilterVal(alarm)
-               
+               alarmval = self.getFilterVal(alarm)
+
                #If user doesn't want "empty", and the alarmval is not set
                if (option.lower() == "empty" and alarmval == None) :
                   #Don't want the alarm
@@ -182,253 +257,785 @@ class Filter(object) :
                      keepalarm = False
          if (not keepalarm) :
             break
+           
+ 
       #return the result.
       return(keepalarm)
-
-
-#A CategoryFilter 
-#Users can display/hide alarms according to category
-class CategoryFilter(Filter) :
+    
+   def reset(self) :
+      """ Reset the options in the filter
+      """
+      pass
    
-   def __init__(self) :
-      super(CategoryFilter,self).__init__("category")
-           
-   #Each category type has its own set of options   
-   def GetOptions(self) :
+   def saveFilter(self) :
+      """ Save the user's filter options
+      """
+      optionstate = {}
+      for option in self.options :
+         val = self.getOptionState(option)
+         optionstate[option] = val
+      return(optionstate)
+
+   
+
+   
+   
+
+
+class OverrideTypeFilter(Filter) :
+   """ Filter on the alarm's OverrideType
+   """
+
+   def __init__(self,filtername='override_type',config=None) :
+      super(OverrideTypeFilter,self).__init__(filtername,config)
+      
+   def getOptions(self) :
+      """ Request list of override types from JAWS
+      """
+      return(get_override_types())
+ 
+   
+class OverrideReasonFilter(Filter) :
+   """ Filter on the override reason         
+   """
+      
+   def __init__(self,filtername='reason',config=None) :
+      super(OverrideReasonFilter,self).__init__(filtername,config)
+   
+   def getOptions(self) :
+      """ Request list of override reasons from JAWS
+      """
+      return(get_override_reasons())
+      
+   
+class CategoryFilter(Filter) :
+   """ Filter on the list of categories     
+   """
+   def __init__(self,filtername='category',config=None) :
+      super(CategoryFilter,self).__init__(filtername,config)
+      
+   def getOptions(self) :
+      """ Request list of categories from JAWS
+      """
       
       return(get_category_list())
    
-   #Access the alarm's category         
-   def GetFilterVal(self,alarm) :
-      return(alarm.get_property('category',name=True))
 
-#A LocationFilter
-#Users can display/hide alarms based on location
 class LocationFilter(Filter) :
-   def __init__(self) :
-      super(LocationFilter,self).__init__("location")
+   """ Filter on the list of locations   
+   """
+   def __init__(self,filtername='location',config=None) :
+      super(LocationFilter,self).__init__(filtername,config)
       
    #Get the valid locations from Kafka           
-   def GetOptions(self) :
+   def getOptions(self) :
+      """ Request list of locations from JAWS
+      """    
       return(get_location_list())   
       
-   #Access the alarm's location
-   def GetFilterVal(self,alarm) :
-      return(alarm.get_property('location',name=True))
 
-#Choices for the status filter          
 class StatusFilter(Filter) :  
-   def __init__(self) :      
-      super(StatusFilter,self).__init__('status')
-      self.options.remove("Empty")
+   """ Filter based on the current status of the alarm  
+   """
+   def __init__(self,filtername='status',config=None) :     
+      super(StatusFilter,self).__init__(filtername,config)
+      
+      #Can't have an "Empty" alarm status
+  #    self.options.remove("Empty")
    
-   def GetOptions(self) :
-      return(['LATCHED','MAJOR','ALARM','MINOR'] )
+   def getOptions(self) :
+      #This list should be retrieved from JAWS.
+      return(['LATCHED','MAJOR','ALARM','MINOR','NORMAL'] )
    
    #A little more processing on the return value.
    ### THIS MAY HAVE TO BE REVISITED ##      
-   def GetFilterVal(self,alarm) :
+   def getFilterVal(self,alarm) :
       #What's the state?
       state = alarm.get_state(name=True)
       val = alarm.get_sevr(name=True)      
       if ("latched" in state.lower()) :
          val = "LATCHED"      
+      if ("normal" in state.lower()) :
+         val = "NORMAL"
+      
       return(val)
    
-      
-
+   
 #Type of alarm (epics,nagios,smart)
 class TypeFilter(Filter) :
-   def __init__(self) :      
-      super(TypeFilter,self).__init__('type')
+   """ Filter on the type of alarm (epics,nagios,smart..)  
+   """
+   def __init__(self,filtername='type',config=None) :
+      super(TypeFilter,self).__init__(filtername,config)
    
-   def GetOptions(self) :
+   def getOptions(self) :
+      #This list should be retrieved from JAWS.
       return(['epics'])      
    
-   def GetFilterVal(self, alarm) :
+   def getFilterVal(self, alarm) :
       return(alarm.get_property('alarm_class',name=True))
 
 #Alarm priority      
 class PriorityFilter(Filter) :
-   def __init__(self) :
-      self.options = ['P1','P2','P3']
-      
-      super(PriorityFilter,self).__init__('priority')
-      
-      
-   def GetOptions(self) :
-      return(get_priority_list())
-        
-   def GetFilterVal(self,alarm) :
-      alarm.get_property('priority',name=True)
-
-#Popup context menu assigned to header columns
-class FilterMenu(QtWidgets.QMenu) :
-   def __init__(self,filter,parent=None) :
-      super(FilterMenu,self).__init__("Filters",parent)
-      
-      self.parent = parent
-      self.filter = filter
-      
-      #Keep a list of the option checkbox widgets to configure
-      #as a whole
-      self.checkboxlist = []
-      
-      #Each filter has a checkbox for "All"
-      self.allcheckbox = None
-      
-      self.setTearOffEnabled(True) 
-      title = filter.getName().capitalize() + " Filters"   
-      self.addSection(title)
+   """ Filter on the alarms' priority of alarm
+   """   
+   def __init__(self,filtername='priority',config=None) :
+      super(PriorityFilter,self).__init__(filtername,config)
             
-      #Create the options for this filter
-      self.MakeOptions()
+   def getOptions(self) :
+      """ Request list of priorities from JAWS
+      """    
+
+      return(get_priority_list())
+
+
+   
       
-   #Add the filter options to the menu.      
-   def MakeOptions(self) :
       
-      #First create an option for "All"
-      widget = self.OptionWidget("All")
-      action = QtWidgets.QWidgetAction(self)
-      action.setDefaultWidget(widget)
-      self.addAction(action)
-                  
-      self.addSeparator()
+class ExclusiveFilter(Filter) :
+   def __init__(self,filtername=None,config=None) :
+      super(ExclusiveFilter,self).__init__(filtername,config)
       
-      #Create an "option widget" for each option in the 
-      #filter. Have to create widget to work around unwanted contextmenu 
-      #behavior -- automatically closing when a checkbox is selected/deselected
-      #We want the user to be able to select/deselect more than one...
-      filter = self.filter
-      for status in filter.options :
-         widget = self.OptionWidget(status)
-         action = QtWidgets.QWidgetAction(self)
-         action.setDefaultWidget(widget)
-         self.addAction(action)
+   def initState(self) :
+      """ Initialize each option
+          For a exclusive filter, if All = True -- all others are False
+      """     
+      optionstate = self.getCurrentState()
       
-      #Determine the state of the "All" option
-      self.ConfigAllOption()
+      if (optionstate == None) :
+         optionstate = {}
+         for option in self.options :
+            state = False
+            if (option.lower() == "all") :
+               state = True       
+            optionstate[option] = state  
+      return(optionstate)
+   
+   def setFilterState(self) :
+      """ If "All" is selected filterstate = False
+      """
+      filtered = False
+      state = self.getOptionState("All")
+      if (not state) :
+         filtered = True
+              
+      self.filtered = filtered
+      
+   def selectAll(self,check) :
+      """ No action necessary to set the "all state" for
+          Exclusive filter
+          But need to overload parent Filter
+      """
+      """ Apply "check" to all filter options
+          Args:
+            check: option is checked (True/False)
+      """
+
+
+      self.setFilter("All",check)
+      checkothers = True
+      if (check) :
+         checkothers = False
+      for option in self.options : 
+         if (option.lower() != "all") :
+            self.setFilter(option,checkothers)
+      self.setHeader()      
+
+      return
+  
+   
+   def setHeader(self) :
+      """ Determine whether or not we add the filter icon to
+          the column header.
+      """
+      #Exclusive filter only depends on the state of the "All" options
+      headerfilter = False
+      
+      allstate = self.getOptionState("All")
+      if (not allstate) :
+         headerfilter = True
+      #Call the model with the results
+      getModel().configureHeader(self.getName(),headerfilter)      
+      #Update the Manager's filter action on ToolBar      
+      getManager().getRemoveFilterAction().setState()
+    
+   def applyFilter(self,alarm) :
+      """ Apply the filter to this alarm
+          This is called by the model's "filterAcceptRow" method.
+          Which compare the filter configuration to the alarm's value.
+            Args:
+               alarm : JAWSAlarm 
+      """     
+      #Assume we'll keep the alarm.
+      keepalarm = True
+      #Access the current configuration.
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :        
+         return(True)
+      
+      #Go through each filter option
+      for option in self.options :        
+         #For a ExclusiveFilter, we only want the option that is "True"
+         #optionstate configuration.
+         if (option in optionstate) :
+            #The desired state of the user. 
+            state = optionstate[option]           
+            if (not state) : 
+               continue
+            #If "All" is selected...keep all alarms.
+            if (option.lower() == "all") :
+               keepalarm = True
+            else :
+               #alarmval = self.getFilterVal(alarm)      
+               keepalarm = self.keepAlarm(alarm,option)         
+      return(keepalarm)
+   
+   #Access the filter state
+   def isFiltered(self) :
+      """ Has this filter been applied? 
+      """
+      filtered = True
+      allstate = self.getOptionState("All")
+      if (allstate) :
+         filtered = False
+      self.filtered = filtered     
+      return(self.filtered)
+
+      
+class RelativeTimeFilter(ExclusiveFilter) :
+   def __init__(self,filtername='timestamp',config=None) :
+      
+      super(RelativeTimeFilter,self).__init__(filtername,config)
+   
+   def getOptions(self) :
+      """ Get the options to display the relative time filter
+      """
+      options = []
+      for duration in QUICKDURATIONS :
+         text = "< " + QUICKDURATIONS[duration]['text']
+         options.append(text)      
+      return(options)
+   
+   def getFilterVal(self, alarm) :
+      val =  alarm.get_state_change()
+      return(val)
+
+   def keepAlarm(self,alarm,option) :
+      keepalarm = True
+      
+      #If "All" is selected...keep all alarms.
+      if (option.lower() == "all") :
+         keepalarm = True
+      else :
+         alarmval = self.getFilterVal(alarm)      
+              
+         #If user doesn't want "empty", and the alarmval is not set
+         if (option.lower() == "empty" and alarmval == None) :
+            #Don't want the alarm
+            keepalarm = False
+               
+         #Process the alarmval to see if it applies 
+         elif (alarmval != None) :
+            #QUICKDURATIONS has the a label, and number of seconds
+            #for the option.
+            for choice in QUICKDURATIONS :
+               label = QUICKDURATIONS[choice]['text']
+               filterseconds = QUICKDURATIONS[choice]['seconds']
+               
+               #Label may not be exact for options...but if
+               #the label is in the option text, we found it.
+               if (label in option) :
+                  #What time is it now (unixseconds)
+                  now = convert_timestamp(int(time.time()) * 1000).timestamp()
+                  #The alarm's timestamp in unixseconds
+                  alarmseconds = alarmval.timestamp()
+                  diff = now - alarmseconds
+                  #Keep the alarm if the alarm timestamp is LESS than the
+                  #number of seconds associated with the option 
+                  if (diff <= filterseconds ) :
+                     keepalarm = True
+                  else :
+                     keepalarm = False
+      return(keepalarm)
+                        
+      
+class CountFilter(Filter) :
+   def __init__(self,name='name',config=None) :
+      super(CountFilter,self).__init__(name,config)
+   
+      self.hiderows = False
+   
+   def getFilterVal(self,alarm) :
+      
+      data = getModel().data
+      alarmindex = data.index(alarm)
+        
+         
+      #vertheader = getTable().verticalHeader()
+      #The number of rows that are currently VISIBLE
+      wantrows = 2
+  #    print("GETFILTER VAL",self.hiderows)
+    #  visiblerows = vertheader.count()
+      for row in reversed(range(getModel().rowCount(0))) :
+       #  if (not self.hiderows) :
+        #    getTable().setRowHidden(row,False)
+         if (row >= wantrows) :
+            
+            getTable().setRowHidden(row,True)
+         else :
+            getTable().setRowHidden(row,False)
       
       return
+ 
+      
+   def keepAlarm(self,alarm,option) :
+      keepalarm = True
+      
+      #If "All" is selected...keep all alarms.
+      if (option.lower() == "all") :
+         keepalarm = True
+      else :
+         alarmval = self.getFilterVal(alarm)      
+              
+         #If user doesn't want "empty", and the alarmval is not set
+         if (option.lower() == "empty" and alarmval == None) :
+            #Don't want the alarm
+            keepalarm = False
+               
+         #Process the alarmval to see if it applies 
+         elif (alarmval != None) :
+            #QUICKDURATIONS has the a label, and number of seconds
+            #for the option.
+            for choice in QUICKDURATIONS :
+               label = QUICKDURATIONS[choice]['text']
+               filterseconds = QUICKDURATIONS[choice]['seconds']
+               
+               #Label may not be exact for options...but if
+               #the label is in the option text, we found it.
+               if (label in option) :
+                  #What time is it now (unixseconds)
+                  now = convert_timestamp(int(time.time()) * 1000).timestamp()
+                  #The alarm's timestamp in unixseconds
+                  alarmseconds = alarmval.timestamp()
+                  diff = now - alarmseconds
+                  #Keep the alarm if the alarm timestamp is LESS than the
+                  #number of seconds associated with the option 
+                  if (diff <= filterseconds ) :
+                     keepalarm = True
+                  else :
+                     keepalarm = False
+      return(keepalarm)
+
+   def applyFilter(self,alarm,row) :
+      """ Apply the filter to this alarm
+          This is called by the model's "filterAcceptRow" method.
+          Which compare the filter configuration to the alarm's value.
+            Args:
+               alarm : JAWSAlarm 
+      """     
+      #Assume we'll keep the alarm.
+      keepalarm = True
+      #Only need the "max" option value
+      
    
-   #Create an "option widget" 
-   #Have to create widget to work around unwanted contextmenu 
-   #behavior -- automatically closing when a checkbox is selected/deselected
-   #We want the user to be able to select/deselect more than one...
-   def OptionWidget(self,option) :
-      filter = self.filter
       
-      #Can't just add a checkbox, because the margins are too small.
-      #Instead, we'll create a layout/widget so we can adjust them
-      layout = QtWidgets.QHBoxLayout()
-      widget = QtWidgets.QWidget()
-      widget.setLayout(layout)
+  #    getModel().VisibleRowOrder()
+      maxalarms = self.getOptionState('max')
+      if (maxalarms == 0) :
+         return(True)
       
-      #Have to reduce the top and bottom margins 
-      margins = layout.contentsMargins()
-      margins.setBottom(0)
-      margins.setTop(0)
-      layout.setContentsMargins(margins)   
+      if (row >= int(maxalarms)) :
+         return(False)
       
-      checkbox = QtWidgets.QCheckBox(option,self)
-      layout.addWidget(checkbox) 
+      return(True)
       
-      #What is the current value of the option.
-      #Filter option values can be set by the user's preference file
-      #at start up.
-      val = filter.GetOptionSetting(option)  
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :        
+         return(True)
       
-      checkbox.setChecked(val) 
-      
-      #Bindings are a little different for the "All" checkbox and 
-      #the option checkbox   
-      if (option.lower() != "all") :
-         self.checkboxlist.append(checkbox)          
-         checkbox.clicked.connect(self.Trigger)
-      elif (option.lower() == "all") :
-         self.allcheckbox = checkbox
-         checkbox.clicked.connect(self.selectAll)
-      return(widget)
+      #Go through each filter option
+      for option in self.options :        
+         #For a ExclusiveFilter, we only want the option that is "True"
+         #optionstate configuration.
+         if (option in optionstate) :
+            #The desired state of the user. 
+            state = optionstate[option]           
+            if (not state) : 
+               continue
+            #If "All" is selected...keep all alarms.
+            if (option.lower() == "all") :
+               keepalarm = True
+            else :
+               #alarmval = self.getFilterVal(alarm)      
+               keepalarm = self.keepAlarm(alarm,option)         
+      return(keepalarm)
+
+   def setHeader(self) :
+      """ Determine whether or not we add the filter icon to
+          the column header.
+      """
+      #Exclusive filter only depends on the state of the "All" options
+      headerfilter = self.isFiltered()
+ 
+      #Call the model with the results
+      getModel().configureHeader(self.getName(),headerfilter)      
+      #Update the Manager's filter action on ToolBar      
+      getManager().getRemoveFilterAction().setState()
    
-   #Called when a filter option is selected/deselected      
-   def Trigger(self,value) :
-      #The sender will be the checkbox from which the signal came
-      sender = self.sender()  
-      option = sender.text()    
+   def selectAll(self,check) :
+      """ 
+      """
+      self.resetFilter() 
+ #     for option in self.options :        
+  #       self.setFilter(option,check)
+      self.setHeader()      
+
+   def resetFilter(self) :
+      #Reset optionstate when filter removed
+      currentstate = self.getCurrentState()
+      currentstate['max'] = 0
+      self.setState(currentstate)
+      return(currentstate)
       
-      #Actually set the filter 
-      self.filter.setFilter(option,value)
+   #Access the filter state
+   def isFiltered(self) :
+      """ Has this filter been applied? 
+      """
       
-      #Redetermine the value of the "all" option
-      self.ConfigAllOption()
+      filtered = False
+      maxrows = self.getOptionState("max") 
+      if (int(maxrows) > 0) :
+         filtered = True
       
-      #Set the column header based on the new state
-      self.filter.setHeader()
+      self.filtered = filtered
+      
+      return(self.filtered)
+ 
+   #Get the filter's current optionstate
+   def getCurrentState(self) :     
+      """ The most recent state of the filter options
+      """
+      #CountFilter - 2 options "All" and 'max'
+      #All = True, max = 0 or #All=False,max>0
+      
+      currentstate = self.optionstate
+      if (currentstate == None) :
+         return(currentstate)
+      return(self.optionstate)
+ 
+   def initState(self) :
+      """ Initialize each option as "True" 
+      """     
+      optionstate = self.getCurrentState()
+      if (optionstate == None) :
+         optionstate = {}
+         
+         optionstate['max'] = 0
+         
+      
+      return(optionstate)
+   
+   def getOptions(self) :
+      options = {}
+      options['max'] = 0
+      return(options)
+
+   def updateOptions(self) :
+      """ Create the list of options for the filter
+      """
+      options = self.getOptions()
+      self.setFilterOptions(options)
+      
+      #Stores whether or not the option has been filtered
+      self.optionstate  = self.initState()
+
+   
+   def setFilter(self,option,value) :      
+      
+      """ Applies the filter to the model
+          Args:
+            option : A filter choice (examples: [RF] [Injector])
+            value  : Qt.checked or Qt.Unchecked
+      """
+ 
+      if (option == "max" and value == True) :
+         return
+      
+      #Get the current setting configuration and set the option's
+      #value as appropriate
+     
+      optionstate = self.getCurrentState()
+      
+      optionstate[option] = value
+      
+      #Warn the the proxymodel that something is going to change
+      #and the table needs to redraw...and thus refilter
+      getModel().layoutAboutToBeChanged.emit() 
+      #Assign the new setting configuration
+      self.setState(optionstate) 
+      
+      #Let the proxy model know we're done.
+      getModel().layoutChanged.emit()  
       
 
-   #Called when the "All" option is selected/deselected 
-   def selectAll(self,selected) :      
-      #select/unselect each check box
-      filter = self.filter
-      for checkbox in self.checkboxlist :       
-         checkbox.setChecked(selected)
-         #apply the filter for the option
-         option = checkbox.text()
-         val = checkbox.isChecked()
-         filter.setFilter(option,val)
-      #Set the header icon
-      filter.setHeader()
-      
-   #Configure the "All" checkbox based on whether or not
-   #all or some of the options have been selected  
-   def ConfigAllOption(self) :
-      filter = self.filter
-      
-      #The maximum number of boxes to be checked (+1 for "empty")
-      maxchecked = len(filter.options) 
-      #Count the number that have been selected
-      numchecked = self.CountSelected()
-      
-      #Set the checkbox as appropriate      
-      allaction = self.allcheckbox
-      
-      #If all of the options have been checked, check the "all" action
-      if (numchecked == maxchecked) :
-         allaction.setChecked(True)
-      else :
-         #otherwise, uncheck it.
-         allaction.setChecked(False)
-           
-   #Count the number of checkboxes have been checked  
-   def CountSelected(self) :
-      num = 0
-      for checkbox in self.checkboxlist :
-         if (checkbox.isChecked()) :              
-            num = num + 1           
-      return(num)
-      
        
+
+#Dependent on current table values
+class DynamicFilter(Filter) :
+   """ Filter that displays choices based on the content of the table
+   """
+   def __init__(self,filtername=None,config=None) :
+      """ Create an instance
+          ARGS:
+            filtername : Name of the filter/column
+      """
+      super(DynamicFilter,self).__init__(filtername,config)
+      
+      self.filtername = filtername
+  #    if ('Empty' in self.options) :
+   #      self.options.remove("Empty")
+      
+      
+   def getOptions(self) :
+      """ Every time the filter is invoked, it will refresh
+          the options
+      """
+      options = []
+      alarmlist = GetAlarmList()
+      
+      for alarm in alarmlist :
+         user = alarm.get_property(self.filtername)
+         if (user != None and len(user) > 0) :
+            if (not user in options) :
+               options.append(user)
+      
+      return(options)
+  
+  
+   def updateOptions(self) :
+      """ Create the list of options for the filter
+      """
+     
+      #All filters get an "Empty". In case the alarm 
+      #has not been defined with the filtered property
+     
+      #The specific filter options ['RF','Misc','BPM']
+      filteroptions = self.getOptions()
+      self.options = filteroptions
+      
+      #Stores whether or not the option has been filtered
+      self.optionstate  = {}    
+      
+      self.initState()
+ 
+   def initState(self) :
+      """ Initialize each option as "True" 
+      """     
+      
+      optionstate = {}
+      for option in self.options :
+         optionstate[option] = True    #optionstate['RF'] = True (check box is checked)
+      self.optionstate = optionstate
+   
+   def saveFilter(self) :
+      return
+      
+   def reset(self) :
+      
+      
+      """ Called whenever the filter's parent (dialog/context menu)
+      """
+      #All filters get an "Empty". In case the alarm 
+      #has not been defined with the filtered property
+  #    options = ["Empty"]
+      
+      
+      
+      #The specific filter options ['RF','Misc','BPM']
+      filteroptions = self.getOptions()
+      #Add this to "Empty"
+          
+      self.options = filteroptions      
+      if (not self.isFiltered()) :
+         #Whether or not the option is filtered out or not
+         self.optionstate  = {}
+      
+         self.initState()
+
+
+      
+class SearchFilter(DynamicFilter) :
+   def __init__(self,filtername=None,config=None) :
+      super(SearchFilter,self).__init__(filtername,config)
+      
+      self.searchterm = ""
+      
+   def getSearchTerm(self) :
+      return(self.searchterm)
+      
+      
+   def getOptions(self) :
+      pass
+      alarmlist = getAlarmNames()
+      return(alarmlist.sort())
+      
+   def updateOptions(self) :
+      return(self.getOptions())
+   
+   def setSearchTerm(self,string) :
+      
+      self.searchterm = string
+  #    print("SEARCHING FOR",self.searchterm)
+   
+
+   def isFiltered(self) :
+      
+      searchterm = self.getSearchTerm()
+      if (len(searchterm) > 0) :
+         filtered = True
+      self.filtered = filtered
+      return(filtered)
+   
+   def selectAll(self,check=None) :
+      self.setSearchTerm("")
+      self.setHeader()
+      
+   def setHeader(self) :
+      """ Determine whether or not we add the filter icon to
+          the column header.
+      """
+      headerfilter = self.isFiltered()
+     # #Call the model with the results
+      getModel().configureHeader(self.getName(),headerfilter)      
+      #Update the Manager's filter action on ToolBar      
+      getManager().getRemoveFilterAction().setState()
         
+
+
+class NameFilter(SearchFilter) :
+   def __init__(self,filtername='name',config=None) :
+      super(NameFilter,self).__init__(filtername,config)
+   
+   def getOptions(self) :
+      alarmnames = getAlarmNames()
+      return(alarmnames)
+   
+
+   def isFiltered(self) :
+      filtered = False
+      searchterm = self.getSearchTerm()
+      if (len(searchterm) == 0) :
+         filtered = False
+      else :
+         filtered = False
+         alarmnames = self.getOptions() 
+         
+         for name in alarmnames :
             
-class DateTimeFilter(QtWidgets.QWidget) :
-   def __init__(self,label,parent=None,*args,**kwargs) :
-      super(DateTimeFilter,self).__init__(parent,*args,**kwargs)
-      
-      layout = QtWidgets.QHBoxLayout()
-      self.setLayout(layout)
-      
-      label = QtWidgets.QLabel(label)
-      font = QtGui.QFont()
-      font.setBold(True)
-      label.setFont(font)
-      layout.addWidget(label,0,Qt.AlignLeft)
-      
-      edit = QtWidgets.QDateTimeEdit(calendarPopup=True)
-      edit.setDateTime(QtCore.QDateTime.currentDateTime())
-      edit.setDisplayFormat("MMM-dd-yyyy hh:mm:ss")
-      edit.dateChanged.connect(parent.DateChanged)
-      layout.addWidget(edit,0,Qt.AlignLeft)
-      
-   def ApplyFilters(self) :
-      print("APPLY FILTER:",self)
+            keep = self.keepAlarm(name)
+           
+            if (not keep) :
+               filtered = True
+      self.filtered = filtered         
+      return(filtered)
             
+   def applyFilter(self,alarm) :
+      return(self.keepAlarm(alarm))
+      #searchterm = self.getSearchTerm()
+   
+   def keepAlarm(self,alarm) :
+      alarmname = alarm
+      if (not isinstance(alarm,str)) :
+         alarmname = alarm.get_name()
+     
+      
+      keepalarm = True
+      
+      searchterm = self.getSearchTerm()
+      
+      if (searchterm == None) :
+         keepalarm = True
+      elif (len(searchterm) == 0) :
+         keepalarm = True
+      elif (not searchterm.lower() in alarmname.lower()) :
+         keepalarm = False      
+      return(keepalarm)
+
+class TriggerFilter(SearchFilter) :
+   def __init__(self,filtername='trigger',config=None) :
+      super(TriggerFilter,self).__init__(filtername,config)   
+      
+   def getOptions(self) :
+      alarmnames = []
+      alarmlist = GetAlarmList()
+      for alarm in alarmlist :
+         val = self.getFilterVal(alarm)
+         if (val != None) :
+            alarmnames.append(val)
+      
+      return(alarmnames)
+   
+   
+   def isFiltered(self) :
+      filtered = False
+      searchterm = self.getSearchTerm()
+      if (len(searchterm) == 0) :
+         filtered = False
+      
+      else :
+      
+         filtered = False
+         alarmlist = GetAlarmList() 
+         for alarm in alarmlist :
+            keep = self.keepAlarm(alarm)
+           
+         if (not keep) :
+            filtered = True
+         
+      self.filtered = filtered
+         
+      return(filtered)
+ 
+            
+   def applyFilter(self,alarm) :
+     
+      return(self.keepAlarm(alarm))
+ 
+   
+   def keepAlarm(self,alarm) :
+          
+      searchterm = self.getSearchTerm()
+      val = self.getFilterVal(alarm)
+      
+      keepalarm = True  
+      if (len(searchterm) == 0) :
+         return(True)
+      
+      if (val == None) :
+         keepalarm = False
+      elif (searchterm == None) :
+         keepalarm = True
+      elif (len(searchterm) == 0) :
+         keepalarm = True
+      elif (not searchterm.lower() in val.lower()) :
+         keepalarm = False      
+      return(keepalarm)
+
+
+class UserFilter(DynamicFilter) :
+   def __init__(self,filtername='overridden_by',config=None) :
+      super(UserFilter,self).__init__(filtername,config)
+
+   
+
+
+
+
+
+
+
+
+
+
+
+           

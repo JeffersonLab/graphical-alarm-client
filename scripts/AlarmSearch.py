@@ -1,9 +1,130 @@
 from CheckableComboBox import *
+from Filters import *
+from Actions import *
 from utils import *
+
+"""
+.. module:: AlarmSearch.py
+   :synopsis : Widgets that can be used to search alarms
+.. moduleauthor:: Michele Joyce <erb@jlab.org>
+"""
+
+
+class AlarmSearchBar(QtWidgets.QLineEdit) :
+   """ AlarmSearchBar - auto-complete search bar
+   """
+      
+   def __init__(self,parent=None) :
+      super(AlarmSearchBar,self).__init__(parent)
+      
+      self.completer = None  # This is the QT object doing the auto-complete
+      
+      #Make a list of the SearchFilters to apply
+      self.filterlist = self.makeFilters()
+      
+      """ When the cursor position changes, update the internal search list
+      """
+ 
+      self.cursorPositionChanged.connect(self.positionChanged)
+      self.returnPressed.connect(self.takeItem)
+      
+   def updateSearchIndex(self) :
+      """ Create the searchable list of terms, and assign to 
+          a QCompleter
+      """
+      #Get the most recent set of options
+      self.searchindex = self.getCompleterOptions()
+      
+      #If there was already a completer, disconnect and recreate.
+      if (self.completer != None) :
+         self.completer.disconnect()
+      
+      self.completer = QtWidgets.QCompleter(self.searchindex)
+      self.completer.setCaseSensitivity(0)
+      self.setCompleter(self.completer)
+   
+   def getCompleterOptions(self) :
+      """ List of strings to assign the "QCompletor"
+      """
+      options = []
+      for jawsfilter in self.filterlist :
+         filteroptions = jawsfilter.getOptions()
+         options.extend(filteroptions)
+            
+      return(options)
+      
+
+   def positionChanged(self,old,new) :
+      """ Don't need to update between clicks, but the first char triggers the
+          update
+      """
+      if (old <= 0 and new == 1) :
+         self.updateSearchIndex()
+    
+   
+   def takeItem(self) :      
+      """ Called when <Return> is pressed. Selects text in lineEdit()
+      """
+      searchterm = self.text()
+      
+      #Warn the model things may change
+      getModel().layoutAboutToBeChanged.emit()
+      
+      #Go through each filter, and set the search term
+      for jawsfilter in self.filterlist :
+         jawsfilter.setSearchTerm(searchterm)
+         jawsfilter.setHeader()
+      
+      #Tell the model to redraw
+      getModel().layoutChanged.emit()
+      
+   
+   def makeFilters(self) :            
+      """Create a SearchFilter for each property that can be searched,
+         as defined in the COLUMNS dictionary. 
+         examples: NameFilter and TriggerFilter are both SearchFilters.
+         Their lists of options will be searched together for a match. 
+      """
+      
+      filterlist = []
+      columns = getManager().columns
+      
+      for col in columns :          
+         if (not "searchable" in columns[col]) :
+            continue
+         
+         if ("filter" in columns[col]) :          
+            filtertype = columns[col]['filter']  
+            jawsfilter = filtertype(col,columns[col])  
+           
+            
+            getManager().filters.append(jawsfilter)
+            filterlist.append(jawsfilter)
+      return(filterlist)
+      
+ 
+   def applySearchFilters(self,alarm) : 
+      ##keepalarm for all filters must be false 
+      #to return false
+      
+      keepalarm = False
+      for filter in self.filterlist :
+         keep= filter.keepAlarm(alarm)
+         if (keep) :
+            keepalarm = True     
+      return(keepalarm)
+      
+
+
+    
+
+
+
+
 
 
 #Mix between CheckableComboBox and Autocomplete search box
-class AlarmSearch(CheckableComboBox) :
+class AlarmSearchCombo(CheckableComboBox) :
    """ Access to alarms in an auto-complete, checkable combobox
    """   
    def __init__(self,alarmlist,parent=None) :
@@ -17,7 +138,7 @@ class AlarmSearch(CheckableComboBox) :
             parent : parent of widget
       """
       
-      super(AlarmSearch,self).__init__(parent)
+      super(AlarmSearchCombo,self).__init__(parent)
       
       #List of alarms that have been selected
       self.selected = []
@@ -103,7 +224,7 @@ class AlarmSearch(CheckableComboBox) :
          return      
       item = itemlist[0]   
       
-      print("   SELECTEDITEM:",alarmname)
+    
       #If not checked, check it
       if (not item.checkState()) :
          item.setCheckState(Qt.Checked)

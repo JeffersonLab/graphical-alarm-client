@@ -20,7 +20,9 @@ class CheckableComboBox(QtWidgets.QComboBox):
       self.setEditable(True)
       self.lineEdit().setReadOnly(True)
       self.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
-       
+      
+      
+      
       # Use custom delegate
       self.setItemDelegate(CheckableComboBox.Delegate())
 
@@ -74,7 +76,6 @@ class CheckableComboBox(QtWidgets.QComboBox):
       state = Qt.Checked
       if (allitem.checkState()) :
          state = Qt.Unchecked
-      
       numrows = self.model().rowCount() 
       for row in range(numrows) :
          if (row == 0) :
@@ -100,6 +101,7 @@ class CheckableComboBox(QtWidgets.QComboBox):
       self.closeOnLineEditClick = False
 
    def updateText(self):
+      
       texts = []
       for i in range(self.model().rowCount()):
          if self.model().item(i).checkState() == Qt.Checked:

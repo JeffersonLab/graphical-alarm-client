@@ -16,7 +16,7 @@ class PropertyDialog(QtWidgets.QDialog) :
    def __init__(self,alarm,parent=None,*args,**kwargs) :
       super(PropertyDialog,self).__init__(None,*args,**kwargs)
       
-      setDialogStyle(self)
+      getManager().setDialogStyle(self)
       
       self.row = None
       self.alarm = alarm
@@ -67,7 +67,7 @@ class PropertyDialog(QtWidgets.QDialog) :
       self.addSpacer()
       
       groupbox = QtWidgets.QGroupBox(self.alarm.get_name() + " Properties")
-      setGroupBoxStyle(groupbox)
+      getManager().setGroupBoxStyle(groupbox)
       
       groupbox.setLayout(layout)
       vlayout = QtWidgets.QVBoxLayout()
@@ -282,7 +282,7 @@ class ShelfPropertyDialog(PropertyDialog) :
       button = QtWidgets.QPushButton("close")
       layout.addWidget(button)
       button.clicked.connect(self.close)
-      setButtonStyle(button)
+      getManager().setButtonStyle(button)
       
       self.shelfaction = ShelfAction(self)
       button = QtWidgets.QPushButton("Override")
@@ -381,7 +381,7 @@ class AlarmPropertyDialog(PropertyDialog) :
       
       
       button = QtWidgets.QPushButton("Close")
-      setButtonStyle(button)
+      getManager().setButtonStyle(button)
       layout.addWidget(button)
       button.clicked.connect(self.closeDialog)
       
