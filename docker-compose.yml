@@ -57,7 +57,7 @@ services:
     entrypoint: bash
 
   jaws:
-    image: slominskir/jaws:2.6.1
+    image: slominskir/jaws:3.2.0
     tty: true
     stdin_open: true
     hostname: jaws
@@ -71,30 +71,14 @@ services:
       SCHEMA_REGISTRY: "http://registry:8081"
       ALARM_DEFINITIONS: "alarm1|channel1|INJ|RF|/,alarm2|channel2|INJ|RF|/,alarm3|channel3|INJ|RF|/"
   
-  state:
-    image: slominskir/alarm-state-processor:1.1.0
-    hostname: state
-    container_name: state
+
+
+  effective:
+    image: slominskir/jaws-effective-processor:3.1.0
+    hostname: effective
+    container_name: effective
     depends_on:
-      - zookeeper
-      - kafka
-      - registry
       - jaws
     environment:
       BOOTSTRAP_SERVERS: "kafka:9092"
       SCHEMA_REGISTRY: "http://registry:8081"
-   
-  auto:
-    image: slominskir/jaws-auto-override-processor:1.4.0
-    hostname: auto
-    container_name: auto
-    depends_on:
-      - zookeeper
-      - kafka
-      - registry
-      - jaws
-    environment:
-      BOOTSTRAP_SERVERS: "kafka:9092"
-      SCHEMA_REGISTRY: "http://registry:8081"
-      
-   
