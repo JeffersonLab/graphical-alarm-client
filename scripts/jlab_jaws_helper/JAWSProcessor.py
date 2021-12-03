@@ -5,7 +5,8 @@
 """
 
 from jlab_jaws_helper.JAWSAlarm import *
-from jlab_jaws_helper.JAWSConnection import *
+from jlab_jaws_helper.JAWSConsumers import *
+
 
 class JAWSProcessor(object) :
    """ This class provides the means to process an alarm from any topic 
@@ -61,38 +62,33 @@ class JAWSProcessor(object) :
          :type msg: 'cimpl.Message'
          :returns: JAWSAlarm
       """
-     
+      
       #The topic will indicate how to proceed
       topic = get_msg_topic(msg)
+      
       #The msg key is the name of the alarm
       name = get_alarmname(msg) 
       
       #Does the alarm already exist?
       alarm = self.find_alarm(name) 
-     
+      
       #The registered-alarms topic contains the alarm definition 
-      if (topic == "registered-alarms") :
+      if (topic == "alarm-registrations") :
          if (alarm == None) :
+           
             alarm = JAWSAlarm(name,msg)          
          else :
             
             #Redefine the alarm if it already exists
-            alarm.update_alarm(msg)  
+            alarm.update_registration(msg)  
       
       #Alarm has come in on a topic prior to the registered-alarms
       #topic. Create the alarm to be defined later.              
       if (alarm == None) :         
          
          alarm = JAWSAlarm(name,None)
-        
+            
       self._add_alarm(alarm)
+      alarm.update_alarm(msg)
       
-      #Dispense with the alarm as appropriate
-      if (topic == "alarm-state") :
-         
-         alarm.update_state(msg)
-      if (topic == "active-alarms") :
-         alarm.update_active(msg)
-      if (topic == "overridden-alarms") :
-         alarm.update_override(msg)
       return(alarm)

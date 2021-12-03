@@ -5,7 +5,7 @@
 """
 
 from utils import *
-from jlab_jaws_helper.JAWSConnection import *
+from jlab_jaws_helper.JAWSProducers import *
 
 #Define the Actions class
 #Actions can be shared by the tool bars and context menus
@@ -220,7 +220,23 @@ class OverrideAction(Action) :
          dialog.setSelection(selectedalarms)   
 
       
+class ShowActiveOverridesAction(Action) :
+   def __init__(self,parent=None,*args,**kwargs) :
+      """
+         Create an instance
+         Args:
+            parent: QToolbar 
+      """
+            
+      self.icon = QtGui.QIcon("database--plus.png")
+      self.text = "Show overridden alarms"
+      self.tip = "Show overridden alarms"
+      self.parent = parent
+      self.filters = getManager().getFilters()
       
+      super(ShowActiveOverridesAction,self).__init__(parent,*args,**kwargs)
+      self.setCheckable(True)
+    
 class RemoveFilterAction(Action) :
    """
       For visual hint of filtered data, this toolbar button is checked 
@@ -505,8 +521,10 @@ class AckAction(Action) :
       #Only those with a latch severity make the cut
       needsack = []
       for alarm in alarmlist :
+         
          if ("latched" in alarm.get_state(name=True).lower())  :
             needsack.append(alarm)
+      
       return(needsack) 
    
    
@@ -521,6 +539,7 @@ class AckAction(Action) :
       
       if (len(needsack) > 0) :
          valid = True
+      print("ACTION VALID:",valid)
       return(valid)
    
    def configToolBarAction(self) :
@@ -536,8 +555,10 @@ class AckAction(Action) :
    def performAction(self) :            
       """ Acknowledge the list of alarms """     
       producer = OverrideProducer(getManager().type,'Latched')      
-      alarmlist = self.getSelectedAlarms()      
+      
+      alarmlist = self.getAlarmsToBeAcknowledged()
       for alarm in alarmlist :        
+         
          producer.ack_message(alarm.get_name())
 
      

@@ -9,13 +9,13 @@ docker-compose up
 #load ps command
 apt-get update && apt-get install -y procps
 
-192.168.1.6
 ######################################################
 #Set up environment
 ip=$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p')
 echo $ip
 /opt/X11/bin/xhost + $ip
 ######################################################
+
 
 #MUST GET IN BASH SHELL
 source ~erb/.bash_profile
@@ -36,9 +36,13 @@ python3 AlarmManager.py
 
 CONSOLE COMMANDS
 -------------------
-docker exec -it jaws /scripts/client/set-registered.py latching1 --latching --producersimple
+docker exec -it jaws /scripts/client/set-registration.py latching1 --latching --producersimple
+
+
+ACTIVATE ALARM
+---------------------
 docker exec -it jaws /scripts/client/set-state.py alarm1 --state Active
-docker exec -it jaws /scripts/client/set-active.py alarm1 
+docker exec -it jaws /scripts/client/set-activation.py alarm1 
 
 SHELVE
 ----------------

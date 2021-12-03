@@ -8,13 +8,13 @@ import pytz
 import time
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QIcon, QPixmap, QImage, QFont, QColor
-from jlab_jaws.avro.subject_schemas.entities import *
+from jlab_jaws.avro.entities import *
 
-#from jlab_jaws_helper import JAWSConnection
+from jlab_jaws_helper.JAWSConsumers import *
 
 DEPLOY = "ops"
 
-TEST = False
+DEBUG = False
 MANAGER = None
 
 PROCESSOR = None
@@ -71,7 +71,29 @@ QUICKDURATIONS = {
 }
 
 SOURCEDIR = "./"
+
+TOPICS = {
+   'alarm-registrations'   : { 'consumer_type' : AlarmRegistrationsConsumer,
+      'description' : "Topic contains current set of registered alarms" },
+   'effective-activations' : { 'consumer_type' :EffectiveActivationsConsumer,
+      'description' : "Topic provides an alarm's effective state"},
+   'alarm-overrides' : { 'consumer_type' : AlarmOverrideConsumer,
+      'description' : "Topic containing override information"},
+   'effective-registrations' : {'consumer_type' : EffectiveRegistrationsConsumer,
+      'description' : ""}
+   }
  
+"""  
+#'alarm-activations'     : {'consumer_type' : AlarmActivationsConsumer,
+      'description' : "Topic provides alarm's actual state"},
+   'effective-alarms' : {'consumer_type' : EffectiveAlarmConsumer,
+      'description' : ""},
+
+   'alarm-classes' : {'consumer_type' : AlarmClassConsumer,'description': ""},
+   'effective-registrations' : {'consumer_type' : EffectiveRegistrationConsumer,
+      'description' : ""}
+#}
+"""
 # cancelbutton.setStyleSheet('QPushButton{background-color: darkRed; color: white}')
  
  
@@ -324,13 +346,15 @@ def GetDeployment() :
    return(DEPLOY)
 
 #Command-line option -test. Set to use throughout   
-def SetTest(test) :
-   global TEST
-   TEST = test
+def setDebug(debug) :
+   global DEBUG
+   DEBUG = debug
 
-#Access command-line -test option
-def GetTest() :
-   return(TEST)
+def getDebug() :
+   return(DEBUG)
+ 
+    
+
 
 def setManager(manager) :
    global MANAGER

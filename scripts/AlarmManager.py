@@ -38,16 +38,20 @@ COLUMNS = {
 class AlarmManager(JAWSManager) :
    """ A JAWSManager to display active alarms
    """
-   def __init__(self,*args,**kwargs) :
-               
+   def __init__(self,debug=False,*args,**kwargs) :
+      
       self.columns = COLUMNS
       self.name = "alarmmanager"  
       super(AlarmManager,self).__init__("JAWS - Active Alarm Manager",self.name,
          *args,**kwargs)
       
+      
+      self.showoverrides = False
+      
       self.stylecolor = 'darkRed'     
       self.makeFilters()
    
+  
    def createToolBar(self) :
       """ AlarmManager toolbar
       """
@@ -116,7 +120,8 @@ class AlarmManager(JAWSManager) :
        
       #Determine whether or not to display/remove the alarm.
       if (alarm != None) :
-         state = alarm.get_state(name=True)       
+         state = alarm.get_state(name=True)    
+         
          if (state != None and not isinstance(state,dict)) :
             state = state.lower()
             if (state == "active" or "latched" in state) :
@@ -160,6 +165,8 @@ class AlarmToolBar(ToolBar) :
       overrideaction = OverrideAction(self).addAction()
       self.actionlist.append(overrideaction)
       
+      showoverridesaction = ShowActiveOverridesAction(self).addAction()
+      self.actionlist.append(showoverridesaction)
       #This spacer puts the seachwidget on the far right.
       spacer = QtWidgets.QWidget()
       spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
@@ -208,7 +215,11 @@ class AlarmMenuBar(QtWidgets.QMenuBar) :
       filemenu.addAction(exitaction)
       
       self.setStyleSheet('QMenuBar{background-color: black; color: white}')
- 
+
+
+
+
+
 
 app = QtWidgets.QApplication(sys.argv)
 app.setStyleSheet('QMainWindow{border: 5px solid darkRed;}')

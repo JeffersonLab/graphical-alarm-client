@@ -194,7 +194,6 @@ class JAWSModel(QtCore.QAbstractTableModel) :
       """
       #warn the model of the change
       self.layoutAboutToBeChanged.emit()    
-      
       #Remove the alarm from the data first.
       if (alarm in self.data) :
          self.data.remove(alarm)

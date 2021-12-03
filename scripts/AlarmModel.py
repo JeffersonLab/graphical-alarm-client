@@ -28,7 +28,7 @@ class AlarmModel(JAWSModel) :
           
       alarm = self.data[row] 
       (sevr,latch) = self.getDisplay(alarm) 
-      
+
       #Status display is a little more complex
       if (col == self.getColumnIndex('status')) :
          if (role == Qt.BackgroundRole) :
@@ -53,7 +53,8 @@ class AlarmModel(JAWSModel) :
                
          alarmprop = self.getColumnName(col)
          if (col == self.getColumnIndex('timestamp')) :
-            timestamp = alarm.get_state_change()
+            timestamp = alarm.get_property('effective_state_change')
+           
             if (timestamp != None) :
                return(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
          elif (col == self.getColumnIndex('type')) :
@@ -74,12 +75,15 @@ class AlarmModel(JAWSModel) :
 
       state = alarm.get_state(name=True)
       latching = alarm.get_latching()
-      
       sevr = alarm.get_sevr(name=True)
+  
+        
+        
       latch = None    
       if (latching) :
-         if (state.lower() == "latched") :
+         if ("latched" in state.lower()) :
             latch = sevr
+         
          elif(state.lower() == "normallatched") :
             latch = sevr
             sevr = "NO_ALARM"

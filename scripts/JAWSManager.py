@@ -15,8 +15,9 @@ from utils import *
 parser = argparse.ArgumentParser()
 parser.add_argument('-test',help="Run in debug mode",action='store_true')
 args = parser.parse_args()
+print("*****",args.test)
 
-SetTest(args.test)
+setDebug(args.test)
 
       
 #Parent toolbar. There are common actions for children.
@@ -73,7 +74,7 @@ class JAWSMessenger(QtWidgets.QWidget) :
       
 #only one widget for a main window
 class JAWSManager(QtWidgets.QMainWindow) :
-   def __init__(self,title,type,*args,**kwargs) :
+   def __init__(self,title,type,debug=False,*args,**kwargs) :
       super(JAWSManager,self).__init__(*args,**kwargs)
       
       
@@ -81,6 +82,7 @@ class JAWSManager(QtWidgets.QMainWindow) :
       self.searchwidget = None
       #Instantiate Manager members
       self.type = type  #Manager type
+      self.debug = debug
       self.data = []    #alarm data
       self.filters = [] #available alarm filters
       self.searchindex = []
@@ -143,7 +145,7 @@ class JAWSManager(QtWidgets.QMainWindow) :
       
       #Initialize
       self.processor = self.createProcessor()
-    #  return
+      #return
      
       
       
@@ -182,29 +184,24 @@ class JAWSManager(QtWidgets.QMainWindow) :
 
    #Create a consumer for the topic  
    def createConsumer(self,topic) :
-      
-      if (topic == 'active-alarms') :
-         consumer = ActiveAlarmsConsumer(self.type,self.initMessages,
-            self.updateMessages)
-      elif (topic == 'alarm-state') :
-         consumer = AlarmStateConsumer(self.type,self.initMessages,
-            self.updateMessages)
-      elif (topic == 'registered-alarms') :
-         consumer = RegisteredAlarmsConsumer(self.type,self.initMessages,
-            self.updateMessages)
-      elif (topic == "overridden-alarms") :
-         consumer = OverriddenAlarmConsumer(self.type,self.initMessages,
+      """
+         Create a consumer for the topic
+         ARGS:
+            topic : topic 
+            monitor : True/False
+         NOTE:
+            When a consumer is created, pass it the initializ
+      """
+      if (topic in TOPICS) :
+         consumer = TOPICS[topic]['consumer_type'](self.type,self.initMessages,
             self.updateMessages)
       else :
-         #The JAWSConsumer includes the event table, which will be
-         #the thread.
-         consumer = JAWSConsumer(self.type,topic,self.initMessages,
-            self.updateMessages)
+         consumer = JAWSConsumer(self.type,self.initMessages,self.updateMessages)
       
       self.consumer_dict[topic] = consumer
       self.consumers.append(consumer)
-      #Start the consumer 
       consumer.start()
+      
       
    #Initial messages (this is in the jawsconsumer thread)
    def initMessages(self,msglist) :      

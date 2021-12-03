@@ -3,7 +3,7 @@ from jlab_jaws_helper.JAWSProcessor import JAWSProcessor
 
 class OverrideProcessor(JAWSProcessor) :
    def __init__(self) :
-      topics = ['registered-alarms','alarm-state','overridden-alarms']
+      topics = ['registered-alarms','alarm-state','alarm-overrides']
       
       super(OverrideProcessor,self).__init__(topics)
       

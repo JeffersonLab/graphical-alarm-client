@@ -53,7 +53,6 @@ class AlarmSearchBar(QtWidgets.QLineEdit) :
             
       return(options)
       
-
    def positionChanged(self,old,new) :
       """ Don't need to update between clicks, but the first char triggers the
           update
@@ -104,9 +103,10 @@ class AlarmSearchBar(QtWidgets.QLineEdit) :
       
  
    def applySearchFilters(self,alarm) : 
-      ##keepalarm for all filters must be false 
-      #to return false
-      
+      """ Apply the search filters to the alarm
+          If any one search filters "keeps" the alarm,
+          The alarm row is visible
+      """  
       keepalarm = False
       for filter in self.filterlist :
          keep= filter.keepAlarm(alarm)
@@ -114,13 +114,6 @@ class AlarmSearchBar(QtWidgets.QLineEdit) :
             keepalarm = True     
       return(keepalarm)
       
-
-
-    
-
-
-
-
 
 
 #Mix between CheckableComboBox and Autocomplete search box
