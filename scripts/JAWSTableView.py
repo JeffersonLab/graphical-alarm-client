@@ -154,7 +154,9 @@ class AlarmTable(JAWSTableView) :
       self.addOverrideAction(menu)
       
       action = self.performAction(event)
+      
       if (action != None) :        
+         
          action.performAction(self.getSelectedAlarms())
    
    def performAction(self,event) :

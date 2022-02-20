@@ -18,7 +18,6 @@ class JAWSProcessor(object) :
        :type topics : list
        
       """   
-      
       self.topics = topics
       self.alarm_list = {}
    
@@ -65,12 +64,27 @@ class JAWSProcessor(object) :
       
       #The topic will indicate how to proceed
       topic = get_msg_topic(msg)
+      topic_obj = self.topics[topic]
+      topic_cfg = topic_obj.unpack_topic(msg)
       
+   
       #The msg key is the name of the alarm
       name = get_alarmname(msg) 
       
       #Does the alarm already exist?
       alarm = self.find_alarm(name) 
+      if (alarm is None) :
+         alarm = JAWSAlarm(name,msg)
+         self._add_alarm(alarm)
+      
+      alarm.update_alarm(topic_cfg)
+      return(alarm)
+      
+      
+      
+      
+      #return
+      
       
       #The registered-alarms topic contains the alarm definition 
       if (topic == "alarm-registrations") :

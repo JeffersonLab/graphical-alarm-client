@@ -14,7 +14,7 @@ from JAWSManager import *
 from jlab_jaws_helper.JAWSProcessor import *
 
 from AlarmSearch import *
-from AlarmProcessor import *
+
 from AlarmModel import *
 from JAWSTableView import *
 
@@ -42,6 +42,7 @@ class AlarmManager(JAWSManager) :
       
       self.columns = COLUMNS
       self.name = "alarmmanager"  
+      self.topicnames = ['effective-activations','effective-registrations']
       super(AlarmManager,self).__init__("JAWS - Active Alarm Manager",self.name,
          *args,**kwargs)
       
@@ -90,7 +91,7 @@ class AlarmManager(JAWSManager) :
    def createProcessor(self) :
       """ Monitors applicable topics and processes them
       """
-      processor = AlarmProcessor()
+      processor = JAWSProcessor()
       return(processor)
    
    def createPropertyDialog(self,alarm) :
@@ -116,12 +117,14 @@ class AlarmManager(JAWSManager) :
       """
       #The processor configures the alarm, and the manager displays the
       #results. The GUI actions must be separate from the thread actions
+      
       alarm = self.processor.process_alarm(msg)
-       
+      
       #Determine whether or not to display/remove the alarm.
       if (alarm != None) :
-         state = alarm.get_state(name=True)    
          
+         state = alarm.get_state(name=True)    
+        
          if (state != None and not isinstance(state,dict)) :
             state = state.lower()
             if (state == "active" or "latched" in state) :

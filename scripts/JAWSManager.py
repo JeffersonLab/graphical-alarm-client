@@ -74,14 +74,14 @@ class JAWSMessenger(QtWidgets.QWidget) :
       
 #only one widget for a main window
 class JAWSManager(QtWidgets.QMainWindow) :
-   def __init__(self,title,type,debug=False,*args,**kwargs) :
+   def __init__(self,title,managername,debug=False,*args,**kwargs) :
       super(JAWSManager,self).__init__(*args,**kwargs)
       
       
       setManager(self)
       self.searchwidget = None
       #Instantiate Manager members
-      self.type = type  #Manager type
+      self.managername = managername  #Manager name
       self.debug = debug
       self.data = []    #alarm data
       self.filters = [] #available alarm filters
@@ -89,6 +89,7 @@ class JAWSManager(QtWidgets.QMainWindow) :
       
       self.stylecolor = None
       
+      self.jaws_topics = {}
       self.consumer_dict = {}
       self.consumers = []
       self.overridedialog = None   #dialog displaying suppression options
@@ -103,8 +104,7 @@ class JAWSManager(QtWidgets.QMainWindow) :
           
       #Create the pieces and parts of the modelview and tableview
       self.createModelAndTable()
-      
-      
+            
       self.toolbar = self.createToolBar()  
       self.addToolBar(self.toolbar)
        
@@ -141,13 +141,11 @@ class JAWSManager(QtWidgets.QMainWindow) :
       #status
       self.initConfig()
       
-      
-      
-      #Initialize
-      self.processor = self.createProcessor()
-      #return
+      self.createTopics()
      
+      #Initialize
       
+      self.processor = JAWSProcessor(self.jaws_topics)
       
       #Start the worker threads to monitor for messages
       self.startWorkers()
@@ -158,23 +156,35 @@ class JAWSManager(QtWidgets.QMainWindow) :
    def setMessage(self,timestamp,message) :
       self.messenger.setMessage(timestamp,message)
       
+   def createTopics(self) :
+      topicnames = self.topicnames
+      
+      for topicname in topicnames :
+         jaws_topic = create_JAWS_topic(self.managername,topicname, 
+            self.initMessages,self.updateMessages,True)
          
+         self.jaws_topics[topicname] = jaws_topic
+      
+
    ### THE FOLLOWING METHODS DEAL WITH THREADING
    
    #Create and start the worker.
    def startWorkers(self) :
       
       #Create a thread for each topic
-      topics = self.processor.get_topics()
+      jaws_topics = self.jaws_topics
       
+      numtopics = len(jaws_topics)
+      
+      #return
       self.threadpool = QThreadPool()  
-      self.threadpool.setMaxThreadCount(len(topics) + 1)
-         
+      self.threadpool.setMaxThreadCount(numtopics + 1)
       self.workerthreads = {}
-      for topic in topics :
-        
-         
+      for topic in self.jaws_topics :
+         jaws_topic = jaws_topics[topic]
+         consumer = jaws_topic.get_consumer()
          worker = JAWSWorker(self.createConsumer,topic)
+         
          self.workerthreads[topic] = worker
          worker.signals.progress.connect(self.updateAlarms)
         
@@ -192,13 +202,10 @@ class JAWSManager(QtWidgets.QMainWindow) :
          NOTE:
             When a consumer is created, pass it the initializ
       """
-      if (topic in TOPICS) :
-         consumer = TOPICS[topic]['consumer_type'](self.type,self.initMessages,
-            self.updateMessages)
-      else :
-         consumer = JAWSConsumer(self.type,self.initMessages,self.updateMessages)
+      jaws_topic = self.jaws_topics[topic]
+      consumer = jaws_topic.get_consumer()
+      self.consumer_dict[topic] = jaws_topic.get_consumer()
       
-      self.consumer_dict[topic] = consumer
       self.consumers.append(consumer)
       consumer.start()
       

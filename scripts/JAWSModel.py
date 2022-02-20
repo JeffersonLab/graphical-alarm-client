@@ -277,17 +277,16 @@ class JAWSProxyModel(QtCore.QSortFilterProxyModel) :
       """ Compare the status value of alarms 
       """
       #These values will be put somewhere better...
-      statusvals = ['LATCHED','MAJOR','ALARM','MINOR','NORMAL',None]
+      statusvals = ['LATCHED','MAJOR','ALARM','MINOR','NORMAL','NO_ALARM',None]
       
       #Get the status of the "left" and "right" alarm
       leftalarm = self.sourceModel().data[leftindex.row()]
       rightalarm = self.sourceModel().data[rightindex.row()]
       leftdisplay = self.getDisplay(leftalarm)
       rightdisplay = self.getDisplay(rightalarm)
-             
+       
       leftrank = statusvals.index(leftdisplay)
       rightrank = statusvals.index(rightdisplay)
-      
       if (leftrank < rightrank) :
          return(True)
       else :

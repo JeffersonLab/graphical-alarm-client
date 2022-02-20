@@ -16,7 +16,15 @@ class WorkerSignals(QObject) :
    result = pyqtSignal(object)
    progress = pyqtSignal(object)
    output = pyqtSignal(object)
-         
+
+#class JAWSWorker(QRunnable) :
+ #  def __init__(self,jaws_topic,*args,**kwargs) :
+ 
+ 
+#class JAWSWorker(QRunnable) :
+ #  def __init__(self,jaws_topic,*args,**kwargs)          
+      
+
 class JAWSWorker(QRunnable) :
    def __init__(self,fn,topic,*args,**kwargs) :
       super(JAWSWorker,self).__init__()
@@ -31,6 +39,7 @@ class JAWSWorker(QRunnable) :
       self.args = args
       self.kwargs = kwargs
       self.running = True
+
       self.signals = WorkerSignals()
       
       # Add the callback to our kwargs
@@ -92,13 +101,10 @@ class Worker(QRunnable) :
    def run(self) :      
       
       while (self.running) :
-         try :
-            
-            
+         try :         
             #Call the proscribed function
             result = self.fn(*self.args,**self.kwargs)
-            
-            #print("RESULT:",result)
+      
          except :
             traceback.print_exc()
          else :

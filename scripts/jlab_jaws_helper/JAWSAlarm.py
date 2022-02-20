@@ -5,6 +5,7 @@
 .. moduleauthor::Michele Joyce <erb@jlab.org>
 """
 
+import collections 
 from jlab_jaws.avro.entities import *
 from jlab_jaws_helper.JAWSConnection import *
 
@@ -24,20 +25,10 @@ class JAWSAlarm(object) :
             msg ('cimpl.Message'/None) : topic message
       
       """      
-      self.name = name      
-      self.config = {}
-      
-      #If the msg is from a topic other than registered alarms,
-      #create an alarm to be defined when the registered alarm comes in.
-      if (msg == None) : 
-         return   
-      
-      print("\n",self.get_name()) 
-      print(get_msg_value(msg).__dict__,"\n")
-      
-      self._add_headers(msg)
-      
-      timestamp = get_msg_timestamp(msg)  
+      self.name = name  
+     
+    #  self.config = collections.OrderedDict()
+      self.config = self._add_headers(msg) 
       #Configure the alarm with the msg information
       self._configure_alarm(get_msg_value(msg).__dict__)
    
@@ -62,67 +53,46 @@ class JAWSAlarm(object) :
    
    
    def _configure_alarm(self,config) :
+      
+      tempconfig = self.config
+      if (config != None) :
+         for key in config :
+            tempconfig[key] = config[key]
+      
+      sorted_config = sorted(tempconfig)
+      
+      for item in sorted_config :
+         self.config[item] = tempconfig[item]
+  
+      if (self.get_name() == "alarm1") :
+         self.print_alarm()
+   
+   
+   
+   def _worksconfigure_alarm(self,config) :
       """ Configure the alarm with the data from a topic
        
          :param config : alarm configuration from topic
          :type config : dict
       
-      """         
-      
+      """    
+      tempconfig = self.config
       #Assign each key of the incoming configuration, to the
       #alarm. This is how the alarm is built up from any topic.
       if (config != None) :         
-         for key in config :
+         for key in config :            
             self.config[key] = config[key]
-           
-            if (key == "producer") :
-               self.config['trigger'] = self.get_producer()
       
- 
-      self.print_alarm()
+      sorted_config = sorted(self.config)
       
-   
-   def update_alarm(self,msg) :
-      """ Update the alarm based on the msg topic
-      """
-      topic = msg.topic()
+      #self.config = sorted_config
+      if (self.get_name() == "alarm1") :
+         self.print_alarm()
+  
+  
+   def update_alarm(self,config) :
+      self._configure_alarm(config)
       
-      #Dispense with the alarm as appropriate
-      if (topic == 'effective-activations') :        
-         self.update_effective_state(msg)
-      elif (topic == "alarm-overrides") :
-         self.update_override(msg)
-      elif (topic == "alarm-activations") :
-         self.update_actual_state(msg)
-      elif (topic == "effective-alarms") :
-         self.update_effective_alarms(msg)
-      elif (topic == "alarm-classes") :
-         print("NOT IMPLEMENTED YET")
-  #    elif (topic == "effective-registrations") :
-         
-     #    self.update_effective_registration(msg) 
-      elif (topic == "alarm-registrations") :
-         self.update_registration(msg)
-      
-      return(None)
-   
-   def update_effective_state(self,msg) :
-      """ The effective state is the state after all potential
-          overrides have been applied. 
-          Called with the effective-activations topic                 
-      """        
-      msginfo = get_msg_value(msg)
-      timestamp = get_msg_timestamp(msg)
-      state_dict = msginfo.__dict__
-      
-      state_dict['effective_state_change'] = timestamp
-      state_dict['effective_state']  = state_dict['state'] #self.get_property(state_dict['state'],name=True)
-      
-      self.get_actual_state(state_dict['actual'])
-        
-      self.get_active_overrides(state_dict['overrides'])
-      self._configure_alarm(state_dict)
-         
    def update_override(self,msg) :
       """Called with the alarm-overrides topic
       """
@@ -143,7 +113,6 @@ class JAWSAlarm(object) :
          dict['override_date'] = timestamp
          dict['override_type'] = key.type.name
          
- 
          if ("oneshot" in dict and dict['oneshot']) :
             dict['override_type'] = "Oneshot " + key.type.name
             dict['expiration'] = None
@@ -164,6 +133,7 @@ class JAWSAlarm(object) :
           being applied. 
           Called with the effective-activations topic
       """
+      return
       msginfo = get_msg_value(msg)
       timestamp = get_msg_timestamp(msg)
      
@@ -198,8 +168,6 @@ class JAWSAlarm(object) :
       actual_dict = msg_dict['actual'].__dict__
       self._configure_alarm(actual_dict)
       
-      
-      
    def update_registration(self,msg) :
       """ Update an alarm from the registered-alarms topic
        
@@ -222,20 +190,14 @@ class JAWSAlarm(object) :
       self.config['registered'] = timestamp
       self._configure_alarm(get_msg_value(msg).__dict__)
    
-   def get_actual_state(self,actual) :
-      actual_state = {}
-      actual_state['sevr'] = None
-      actual_state['stat'] = None
+   def get_actual_state(self,actual=None) :
       
-      if (actual != None) :
-         actual_msg = actual.msg
-         if ('sevr' in actual_msg.__dict__) :
-               actual_state['sevr'] = actual_msg.sevr
-               actual_state['stat'] = actual_msg.stat
+      return(self.get_property('state'))
+        
      
-      self._configure_alarm(actual_state)
+   def get_effective_state(self) :
       
-   
+      return(self.get_property('effective_state'))
    
    
    def get_active_overrides(self,alarm_override_set) :
@@ -259,7 +221,12 @@ class JAWSAlarm(object) :
        :returns: name of the alarm (str)      
       """     
       return(self.name)
-      
+   
+  
+   def get_latch_state(self) :
+      latched = self.get_property('latched');
+      return(latched)
+   
    def get_latching(self) :    
       """ Is the alarm a "latching" alarm?       
        :returns: True/False
@@ -330,7 +297,7 @@ class JAWSAlarm(object) :
        :param value: return the numeric value of the property
        
       """         
- 
+      
       debug = False
       val = self.get_val(alarmproperty)
       if (val != None) :
@@ -349,12 +316,16 @@ class JAWSAlarm(object) :
        :param property : property of interest
        :type property: string
        
-      """                  
+      """ 
+               
       val = None
+      
       if (alarmproperty == "name") :
          return(self.get_name())
       if (self.config != None and alarmproperty in self.config) :
          val = self.config[alarmproperty]
+      
+      
       return(val)
       
    def print_alarm(self) :

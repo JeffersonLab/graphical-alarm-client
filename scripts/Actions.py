@@ -397,8 +397,8 @@ class OneShotAction(Action) :
       #Create an OverrideProducer to send message to overridden topic
       #Create an ackproducer too. Until state processor fixed to remove
       #latch if shelved
-      oneshotproducer = OverrideProducer(getManager().type,'Shelved')
-      ackproducer = OverrideProducer(getManager().type,'Latched')
+      oneshotproducer = OverrideProducer(getManager().getName(),'Shelved')
+      ackproducer = OverrideProducer(getManager().getName(),'Latched')
       
       if (alarmlist == None) :
          alarmlist = self.getSelectedAlarms()
@@ -435,8 +435,8 @@ class DisableAction(Action) :
       #Create an OverrideProducer to send message to overridden topic
       #Create an ackproducer too. Until state processor fixed to remove
       #latch if shelved
-      disableproducer = OverrideProducer(getManager().type,"Disabled")
-      ackproducer = OverrideProducer(getManager().type,'Latched')
+      disableproducer = OverrideProducer(getManager().getName(),"Disabled")
+      ackproducer = OverrideProducer(getManager().getName(),'Latched')
       
       if (alarmlist == None) :
          alarmlist = self.getSelectedAlarms()
@@ -477,9 +477,8 @@ class TimedOverrideAction(Action) :
             comments (str)   : optional free form comments
             alarmlist (list) : optional list of alarms to override
       """     
-      shelfproducer = OverrideProducer(getManager().type,'Shelved')
-      ackproducer = OverrideProducer(getManager().type,'Latched')
-      
+      shelfproducer = OverrideProducer(getManager().getName(),'Shelved')
+      ackproducer = OverrideProducer(getManager().getName(),'Latched')      
       
       if (alarmlist == None) :
          alarmlist = self.getSelectedAlarms()
@@ -517,12 +516,11 @@ class AckAction(Action) :
             list of alarms to be acknowledged
       """
       alarmlist = self.getSelectedAlarms()
-      
+     
       #Only those with a latch severity make the cut
       needsack = []
-      for alarm in alarmlist :
-         
-         if ("latched" in alarm.get_state(name=True).lower())  :
+      for alarm in alarmlist :      
+         if ("latched" in alarm.get_effective_state().lower())  :
             needsack.append(alarm)
       
       return(needsack) 
@@ -539,7 +537,6 @@ class AckAction(Action) :
       
       if (len(needsack) > 0) :
          valid = True
-      print("ACTION VALID:",valid)
       return(valid)
    
    def configToolBarAction(self) :
@@ -552,15 +549,17 @@ class AckAction(Action) :
       else :
          self.setEnabled(True)
    
-   def performAction(self) :            
-      """ Acknowledge the list of alarms """     
-      producer = OverrideProducer(getManager().type,'Latched')      
-      
-      alarmlist = self.getAlarmsToBeAcknowledged()
-      for alarm in alarmlist :        
-         
+   def performAction(self,alarmlist=None) :            
+      """ Acknowledge the list of alarms 
+          @param alarmlist = None
+          @NOTE The AckAction can only be performed on the current 
+          set of latched alarms. 
+      """
+      producer = OverrideProducer(getManager().managername,'Latched')            
+      alarmlist = self.getAlarmsToBeAcknowledged()      
+      for alarm in alarmlist :                 
          producer.ack_message(alarm.get_name())
-
+      
      
    
 #UnShelve selected alarm/alarms      

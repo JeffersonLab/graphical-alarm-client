@@ -114,12 +114,10 @@ class FilterMenu(QtWidgets.QMenu) :
            ARGS:
             checked : True/False option checkbox checked  
       """
-      print("TRIGGER")
       #The sender will be the checkbox from which the signal came
       sender = self.sender()  
       option = sender.text()    
-      
-      print("SENDER:",sender,"OPTION",option)
+      print("MENU TRIGGERED",sender,option)
       #Actually set the filter 
       self.jawsfilter.setFilter(option,checked)
      

@@ -353,8 +353,9 @@ def setDebug(debug) :
 def getDebug() :
    return(DEBUG)
  
-    
-
+def inspect(dictionary) :
+   for key in dictionary :
+      print(key,"=>",dictionary[key])
 
 def setManager(manager) :
    global MANAGER
@@ -373,7 +374,6 @@ def setTable(table) :
 
 def getTable() :
    return(TABLE)
-
 
 #Create the timestamp for the datafile, using the current time.   
 def TimeStamp() :
