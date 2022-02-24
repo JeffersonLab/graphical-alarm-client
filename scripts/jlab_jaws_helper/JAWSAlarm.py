@@ -26,19 +26,19 @@ class JAWSAlarm(object) :
       
       """      
       self.name = name  
-     
-    #  self.config = collections.OrderedDict()
-      self.config = self._add_headers(msg) 
+      
+      headers = self._add_headers(msg)
+      self.config = self._add_headers(msg)
+      
       #Configure the alarm with the msg information
       self._configure_alarm(get_msg_value(msg).__dict__)
    
    def _add_headers(self,msg) :
       """ Add the msg headers to the alarm
       """
-      
       headers = get_headers(msg)
       
-      headerdict = {}
+      headerdict = collections.OrderedDict()
       if (headers is not None) :
          for header in headers :
             var = header[0]
@@ -48,173 +48,41 @@ class JAWSAlarm(object) :
                
             val = header[1].decode() #bytez.decode()header[1]
             headerdict[var] = val
-      
       return(headerdict)    
    
-   
+
    def _configure_alarm(self,config) :
-      
-      tempconfig = self.config
-      if (config != None) :
-         for key in config :
-            tempconfig[key] = config[key]
-      
-      sorted_config = sorted(tempconfig)
-      
-      for item in sorted_config :
-         self.config[item] = tempconfig[item]
-  
-      if (self.get_name() == "alarm1") :
-         self.print_alarm()
-   
-   
-   
-   def _worksconfigure_alarm(self,config) :
       """ Configure the alarm with the data from a topic
        
          :param config : alarm configuration from topic
          :type config : dict
       
       """    
-      tempconfig = self.config
       #Assign each key of the incoming configuration, to the
       #alarm. This is how the alarm is built up from any topic.
       if (config != None) :         
          for key in config :            
             self.config[key] = config[key]
       
-      sorted_config = sorted(self.config)
-      
-      #self.config = sorted_config
+      return
       if (self.get_name() == "alarm1") :
          self.print_alarm()
   
   
    def update_alarm(self,config) :
+      """ Update the alarm with new configuration
+         :param config : alarm configuration from topic
+         :type config : dict
+      """
       self._configure_alarm(config)
-      
-   def update_override(self,msg) :
-      """Called with the alarm-overrides topic
-      """
-      msginfo = get_msg_value(msg) 
-      timestamp = get_msg_timestamp(msg)
-      key = get_msg_key(msg)
-      msginfo = get_msg_value(msg)
-      
-      clear = {
-         'override_date' : None,
-         'override_type' : None,   
-         'oneshot'       : None,
-         'expiration'    : None,
-      }
-      
-      if (msginfo != None) :
-         dict = msginfo.msg.__dict__
-         dict['override_date'] = timestamp
-         dict['override_type'] = key.type.name
-         
-         if ("oneshot" in dict and dict['oneshot']) :
-            dict['override_type'] = "Oneshot " + key.type.name
-            dict['expiration'] = None
-         
-         elif ("expiration" in dict) :
-            dict['expiration'] = convert_timestamp(dict['expiration'])
-         
-         headers = self.add_headers(msg)
-         dict['overridden_by'] = headers['user']
-
-      else :
-         dict = clear
-           
-      self._configure_alarm(dict)
-      
-   def update_actual_state(self,msg) :
-      """ The raw/actual state of the alarm PRIOR to filters
-          being applied. 
-          Called with the effective-activations topic
-      """
-      return
-      msginfo = get_msg_value(msg)
-      timestamp = get_msg_timestamp(msg)
-     
-      alarm_dict = {}    
-      if (msginfo == None) :
-         alarm_dict['actual'] = None
-      else :         
-         alarm_dict = msginfo.__dict__         
-         alarm_dict['actual'] = alarm_dict['msg']
-         alarm_dict.pop('msg')
-      
-      alarm_dict['actual_state_change'] = timestamp
-      
-      self._configure_alarm(alarm_dict)
-      
-      return
-   
-   def update_effective_alarms(self,msg) :
-      """ NOT IMPLEMENTED YET
-      """
-      return
-   def update_alarm_classes(self,msg) :
-      """ NOT IMPLEMENTED NOT SURE IF BELONGS HERE
-      """
-      return
-   
-   def update_effective_registration(self,msg) :
-      msginfo = get_msg_value(msg)
-      msg_dict = msginfo.__dict__
-      
-     
-      actual_dict = msg_dict['actual'].__dict__
-      self._configure_alarm(actual_dict)
-      
-   def update_registration(self,msg) :
-      """ Update an alarm from the registered-alarms topic
-       
-       :param msg : topic messge
-       :type msg: 'cimpl.Message' (can be None) 
-      
-      """  
-      
-      if (msg == None) : ## ***** NEED TO TEST REMOVE REGISTERED 
-         return
-
-      timestamp = get_msg_timestamp(msg)
-      
-      if (get_msg_value(msg) == None) :
-         self.config['removed'] = timestamp
-         
-         #self.config['type'] = None
-         return
-          
-      self.config['registered'] = timestamp
-      self._configure_alarm(get_msg_value(msg).__dict__)
-   
-   def get_actual_state(self,actual=None) :
-      
-      return(self.get_property('state'))
-        
-     
-   def get_effective_state(self) :
-      
-      return(self.get_property('effective_state'))
    
    
-   def get_active_overrides(self,alarm_override_set) :
-      """ Helper script unpacks the alarm's override_set
-      """
-      current_overrides = {}
-      
-      override_dict = alarm_override_set.__dict__
-      for override_type in override_dict :
-         #if (override_dict[override_type] != None) :
-         current_overrides[override_type] = override_dict[override_type]
-      
-      self._configure_alarm(current_overrides)   
-  
-      
    """ Setters and getters for the alarm
    """
+   
+
+      
+  
    
    def get_name(self) :
       """ Get the name of the alarm       
@@ -270,7 +138,21 @@ class JAWSAlarm(object) :
        
       """           
       return(self.get_property('statechange'))
-
+   
+                           
+   def get_actual_state(self) :      
+      """ Get the 'actual_state' (raw/unprocessed) state of the alarm
+      """
+      return(self.get_property('actual_state'))
+        
+     
+   def get_effective_state(self) :
+      """ Get the 'effective_state' (processed) state of the alarm
+      """ 
+      state = self.get_property('effective_state')
+      return(self.get_property('effective_state').name)
+   
+                                 
    def get_sevr(self,name=False,value=False) :
       """ Get the severity of an alarm - if SEVR is not 
           applicable, returns "ALARM" 
@@ -333,7 +215,7 @@ class JAWSAlarm(object) :
       """
       if (self.get_name() != None) :
          print(self.get_name())
-         for key in self.config :
+         for key in sorted(self.config.keys()) :
             
             print("  ",key,"=>",self.config[key])  
          print("--") 

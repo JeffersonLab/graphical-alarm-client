@@ -141,8 +141,10 @@ class JAWSManager(QtWidgets.QMainWindow) :
       #status
       self.initConfig()
       
+      self.createClassTopic()
+      
       self.createTopics()
-     
+      
       #Initialize
       
       self.processor = JAWSProcessor(self.jaws_topics)
@@ -164,7 +166,15 @@ class JAWSManager(QtWidgets.QMainWindow) :
             self.initMessages,self.updateMessages,True)
          
          self.jaws_topics[topicname] = jaws_topic
+         
+   def createClassTopic(self) :
+      topicname = 'alarm-classes'
+      jaws_topic = create_JAWS_topic(self.managername,topicname,
+         self.initMessages,self.updateMessages,False)
+      self.jaws_topics[topicname] = jaws_topic
       
+      
+
 
    ### THE FOLLOWING METHODS DEAL WITH THREADING
    
@@ -296,7 +306,9 @@ class JAWSManager(QtWidgets.QMainWindow) :
    def configureOverrideDialog(self) :
       if (self.overridedialog != None) :
          self.overridedialog.reset()
-         
+    
+   def getName(self) :
+      return(self.name)     
    #Access to the Manager's toolbar  
    def getToolBar(self) :
       return(self.toolbar)

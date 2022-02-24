@@ -487,22 +487,38 @@ class AlarmClassTopic(JAWSTopic) :
       """     
       super(AlarmClassTopic,self).__init__(subscriber,"alarm-classes",
          init_messages,update_messages,monitor,*args,**kwargs)
-   
+      
+      #Keep a list of class names
+      self.classnames = []
+      
    def unpack_topic(self,msg=None) :
       """! Unpack the topic's message. 
       @param msg kafka-topic message
       @return topic_info key=>value dictionary
       """
-
       topic_cfg = super().unpack_topic()
+      
       if (msg != None) :
          class_name = get_msg_key(msg)
+         
          class_info = get_msg_value(msg).__dict__
-        
+         
          class_info['alarm_class_name'] = class_name
          topic_cfg.update(class_info)
+        
+         self.classnames.append(class_name)
+         
       return(topic_cfg)
-       
+   
+   def get_classname_list(self) : 
+      
+      
+      classnames = self.classnames
+      
+      return(classnames)
+   
+   
+   
 class ActivationsTopic(JAWSTopic) :
    """ Common parent of the Alarm and Effective Activations
    """ 

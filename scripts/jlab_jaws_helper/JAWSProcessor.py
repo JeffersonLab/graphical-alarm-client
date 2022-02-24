@@ -20,6 +20,7 @@ class JAWSProcessor(object) :
       """   
       self.topics = topics
       self.alarm_list = {}
+      self.classname_list = []
    
    def get_topics(self) :
       """ Access the subscribed topics
@@ -55,6 +56,9 @@ class JAWSProcessor(object) :
          found = self.alarm_list[alarmname] 
       return(found)
    
+   def get_classname_list(self) :
+      return(self.classname_list)
+      
    def process_alarm(self,msg) :
       """ Process and incoming alarm
          :param msg: message from topic
@@ -67,6 +71,11 @@ class JAWSProcessor(object) :
       topic_obj = self.topics[topic]
       topic_cfg = topic_obj.unpack_topic(msg)
       
+      if ("class" in topic) :
+         classname = topic_cfg['alarm_class_name']
+         if (not classname in self.classname_list) :
+            self.classname_list.append(classname)
+         return(None)
    
       #The msg key is the name of the alarm
       name = get_alarmname(msg) 
@@ -79,30 +88,4 @@ class JAWSProcessor(object) :
       
       alarm.update_alarm(topic_cfg)
       return(alarm)
-      
-      
-      
-      
-      #return
-      
-      
-      #The registered-alarms topic contains the alarm definition 
-      if (topic == "alarm-registrations") :
-         if (alarm == None) :
-           
-            alarm = JAWSAlarm(name,msg)          
-         else :
-            
-            #Redefine the alarm if it already exists
-            alarm.update_registration(msg)  
-      
-      #Alarm has come in on a topic prior to the registered-alarms
-      #topic. Create the alarm to be defined later.              
-      if (alarm == None) :         
-         
-         alarm = JAWSAlarm(name,None)
-            
-      self._add_alarm(alarm)
-      alarm.update_alarm(msg)
-      
-      return(alarm)
+ 

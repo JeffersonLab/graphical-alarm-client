@@ -369,8 +369,10 @@ class TypeFilter(Filter) :
       super(TypeFilter,self).__init__(filtername,config)
    
    def getOptions(self) :
+      classlist = getManager().getProcessor().get_classname_list()
+      
       #This list should be retrieved from JAWS.
-      return(['epics'])      
+      return(classlist)   
    
    def getFilterVal(self, alarm) :
       return(alarm.get_property('alarm_class',name=True))

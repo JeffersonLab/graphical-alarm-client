@@ -87,8 +87,6 @@ class AlarmModel(JAWSModel) :
       #latched != None 
       #actual_state != None 
       #Both boxes red 
-   #   if (alarm.get_name() == "alarm1") :
-    #     print("IS LATCH",is_latched,"SEVR",sevr,"ACTUAL",actual_state)
       
       
       if (sevr == None) :
@@ -101,6 +99,11 @@ class AlarmModel(JAWSModel) :
       if (actual_state == None) :
          latch_state = sevr
          sevr = "NO_ALARM"      
+      
+     # if (alarm.get_name() == "alarm1") :
+      #   print("IS LATCH",is_latched,"SEVR",sevr,"ACTUAL",actual_state)
+
+      
       return(sevr,latch_state)
   
        
