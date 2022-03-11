@@ -4,7 +4,7 @@ version: '3.8'
 
 services:
   zookeeper:
-    image: debezium/zookeeper:1.5.0.Final
+    image: debezium/zookeeper:1.8.1.Final
     hostname: zookeeper
     container_name: zookeeper
     ports:
@@ -12,7 +12,7 @@ services:
 
 
   kafka:
-    image: debezium/kafka:1.5.0.Final
+    image: debezium/kafka:1.8.1.Final
     hostname: kafka
     container_name: kafka
     depends_on:
@@ -23,8 +23,9 @@ services:
       KAFKA_HOME: "/kafka"
       BOOTSTRAP_SERVER: "kafka:9092"
       ZOOKEEPER_CONNECT: 'zookeeper:2181'
+  
   registry:
-    image: confluentinc/cp-schema-registry:6.0.2
+    image: image: confluentinc/cp-schema-registry:7.0.1
     hostname: registry
     container_name: registry
     depends_on:
@@ -57,7 +58,7 @@ services:
     entrypoint: bash
 
   jaws:
-    image: slominskir/jaws:3.2.0
+    image: slominskir/jaws:3.6.0
     tty: true
     stdin_open: true
     hostname: jaws
@@ -74,7 +75,7 @@ services:
 
 
   effective:
-    image: slominskir/jaws-effective-processor:3.1.0
+    image: slominskir/jaws-effective-processor:3.4.1
     hostname: effective
     container_name: effective
     depends_on:
