@@ -1,4 +1,4 @@
-FROM python:3.7-slim
+FROM python:3.9-alpine3.15
 
 ARG CUSTOM_CRT_URL
 
