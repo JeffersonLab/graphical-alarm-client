@@ -1,8 +1,10 @@
-FROM python:3.9-alpine3.15
+FROM python:3.9-slim
 
 ARG CUSTOM_CRT_URL
 
 WORKDIR /
+
+RUN useradd -r -m -s /bin/bash guiuser
 
 RUN apt-get update \
     && apt-get install -y librdkafka-dev wget git bash curl jq gcc python3-tk python3-pyqt5 vim
